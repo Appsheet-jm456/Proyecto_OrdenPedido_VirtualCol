@@ -154,14 +154,7 @@ function crearUsuarioAdmin() {
     return;
   }
 
-  // Verificar si ya hay datos (aparte del encabezado)
-  var ultimaFila = hoja.getLastRow();
-  if (ultimaFila > 1) {
-    Logger.log('Ya existen usuarios. No se creó el admin por defecto.');
-    return;
-  }
-
-  // Crear hash simple de la contraseña (en producción usar algo más robusto)
+  // Crear hash simple de la contraseña
   var passwordHash = Utilities.computeDigest(
     Utilities.DigestAlgorithm.SHA_256,
     'admin123'
@@ -169,10 +162,29 @@ function crearUsuarioAdmin() {
     return ('0' + (byte & 0xFF).toString(16)).slice(-2);
   }).join('');
 
+  // Verificar si ya hay datos (aparte del encabezado)
+  var ultimaFila = hoja.getLastRow();
+
+  if (ultimaFila > 1) {
+    // Ya existen usuarios, actualizar el primero para que sea admin con el correo correcto
+    hoja.getRange(2, 1, 1, 8).setValues([[
+      1,
+      'Administrador',
+      'appsheetjm@gmail.com',
+      passwordHash,
+      'Super admin',
+      'Principal',
+      'Sí',
+      new Date().toISOString()
+    ]]);
+    Logger.log('Usuario Admin actualizado. Email: appsheetjm@gmail.com / Pass: admin123');
+    return 'Admin actualizado exitosamente';
+  }
+
   var adminData = [
     1,                                    // id_usuario
     'Administrador',                      // nombre
-    'admin@ventasvirtuales.com',          // email
+    'appsheetjm@gmail.com',              // email
     passwordHash,                         // password_hash
     'Super admin',                        // rol
     'Principal',                          // local_asignado
@@ -181,8 +193,65 @@ function crearUsuarioAdmin() {
   ];
 
   hoja.getRange(2, 1, 1, adminData.length).setValues([adminData]);
-  Logger.log('Usuario Super Admin creado. Email: admin@ventasvirtuales.com / Pass: admin123');
+  Logger.log('Usuario Super Admin creado. Email: appsheetjm@gmail.com / Pass: admin123');
   return 'Admin creado exitosamente';
+}
+
+// ============================================================
+// Función de emergencia: resetear usuario admin
+// Ejecutar si no puedes acceder al sistema
+// ============================================================
+function resetearAdmin() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var hoja = ss.getSheetByName('Usuarios');
+
+  if (!hoja) {
+    Logger.log('Error: la hoja Usuarios no existe.');
+    return;
+  }
+
+  var passwordHash = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    'admin123'
+  ).map(function(byte) {
+    return ('0' + (byte & 0xFF).toString(16)).slice(-2);
+  }).join('');
+
+  // Buscar si existe el usuario con ese email
+  var datos = hoja.getDataRange().getValues();
+  var encontrado = false;
+
+  for (var i = 1; i < datos.length; i++) {
+    if (datos[i][2] === 'appsheetjm@gmail.com') {
+      // Actualizar password y asegurar que esté activo
+      hoja.getRange(i + 1, 4).setValue(passwordHash);  // password_hash
+      hoja.getRange(i + 1, 5).setValue('Super admin');  // rol
+      hoja.getRange(i + 1, 7).setValue('Sí');           // activo
+      encontrado = true;
+      Logger.log('Admin reseteado en fila ' + (i + 1));
+      break;
+    }
+  }
+
+  if (!encontrado) {
+    // Crear nuevo admin
+    var ultimaFila = hoja.getLastRow();
+    var nuevoId = ultimaFila;
+    hoja.appendRow([
+      nuevoId,
+      'Administrador',
+      'appsheetjm@gmail.com',
+      passwordHash,
+      'Super admin',
+      'Principal',
+      'Sí',
+      new Date().toISOString()
+    ]);
+    Logger.log('Nuevo admin creado');
+  }
+
+  Logger.log('=== Listo. Ingresa con: appsheetjm@gmail.com / admin123 ===');
+  return 'Admin reseteado. Email: appsheetjm@gmail.com / Pass: admin123';
 }
 
 // ============================================================
