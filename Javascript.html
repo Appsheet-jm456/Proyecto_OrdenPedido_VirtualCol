@@ -1,0 +1,655 @@
+<script>
+// ============================================================
+// Javascript.html — Lógica del cliente
+// Sistema de Órdenes de Pedido — Ventas Virtuales Colombia
+// ============================================================
+
+// Estado global
+var sesionToken = null;
+var usuarioActual = null;
+var ordenesCache = [];
+var clientesCache = [];
+var itemsNuevaOrden = [];
+var ordenSeleccionada = null;
+var filtroEstadoActual = null;
+
+// ==================== AUTENTICACIÓN ====================
+function iniciarSesion() {
+  var email = document.getElementById('login-email').value.trim();
+  var password = document.getElementById('login-password').value;
+
+  if (!email || !password) {
+    mostrarErrorLogin('Ingrese correo y contraseña');
+    return;
+  }
+
+  google.script.run
+    .withSuccessHandler(function(resultado) {
+      if (resultado.success) {
+        sesionToken = resultado.token;
+        usuarioActual = resultado.usuario;
+        mostrarDashboard();
+      } else {
+        mostrarErrorLogin(resultado.mensaje);
+      }
+    })
+    .withFailureHandler(function(error) {
+      mostrarErrorLogin('Error de conexión: ' + error.message);
+    })
+    .autenticarUsuario(email, password);
+}
+
+function mostrarErrorLogin(mensaje) {
+  var errorDiv = document.getElementById('login-error');
+  errorDiv.textContent = mensaje;
+  errorDiv.style.display = 'block';
+}
+
+function cerrarSesion() {
+  if (sesionToken) {
+    google.script.run.cerrarSesion(sesionToken);
+  }
+  sesionToken = null;
+  usuarioActual = null;
+  document.getElementById('pantalla-dashboard').style.display = 'none';
+  document.getElementById('pantalla-login').style.display = 'flex';
+  document.getElementById('login-email').value = '';
+  document.getElementById('login-password').value = '';
+  document.getElementById('login-error').style.display = 'none';
+}
+
+// ==================== DASHBOARD ====================
+function mostrarDashboard() {
+  document.getElementById('pantalla-login').style.display = 'none';
+  document.getElementById('pantalla-dashboard').style.display = 'flex';
+  document.getElementById('usuario-nombre').textContent = usuarioActual.nombre + ' (' + usuarioActual.rol + ')';
+
+  // Mostrar tabs según rol
+  if (usuarioActual.rol === 'Super admin') {
+    document.getElementById('tab-usuarios').style.display = 'inline-block';
+    document.getElementById('tab-reportes').style.display = 'inline-block';
+  } else if (usuarioActual.rol === 'Auxiliar') {
+    document.getElementById('tab-reportes').style.display = 'inline-block';
+  }
+
+  cargarContadores();
+  cargarOrdenes();
+  cargarClientes();
+}
+
+function cambiarTab(tab) {
+  // Ocultar todas las secciones
+  var secciones = document.querySelectorAll('.seccion-tab');
+  for (var i = 0; i < secciones.length; i++) {
+    secciones[i].style.display = 'none';
+  }
+
+  // Quitar clase activa de tabs
+  var tabs = document.querySelectorAll('.tab');
+  for (var j = 0; j < tabs.length; j++) {
+    tabs[j].classList.remove('activa');
+  }
+
+  // Mostrar sección seleccionada
+  document.getElementById('seccion-' + tab).style.display = 'block';
+  var tabBtn = document.querySelector('[data-tab="' + tab + '"]');
+  if (tabBtn) tabBtn.classList.add('activa');
+
+  // Cargar datos según tab
+  if (tab === 'clientes') cargarClientes();
+  if (tab === 'usuarios') cargarUsuarios();
+}
+
+// ==================== CONTADORES ====================
+function cargarContadores() {
+  google.script.run
+    .withSuccessHandler(function(contadores) {
+      document.getElementById('cont-pendiente').textContent = contadores['Pendiente'] || 0;
+      document.getElementById('cont-prestado').textContent = contadores['Prestado'] || 0;
+      document.getElementById('cont-porcobrar').textContent = contadores['Por Cobrar/Devolver'] || 0;
+      document.getElementById('cont-facturado').textContent = contadores['Facturado'] || 0;
+      document.getElementById('cont-regresado').textContent = contadores['Regresado'] || 0;
+
+      // Parpadeo si hay Por Cobrar/Devolver
+      var cardPorCobrar = document.getElementById('card-porcobrar');
+      if (contadores['Por Cobrar/Devolver'] > 0) {
+        cardPorCobrar.classList.add('parpadeante');
+      } else {
+        cardPorCobrar.classList.remove('parpadeante');
+      }
+    })
+    .obtenerContadores();
+}
+
+function filtrarPorEstado(estado) {
+  if (filtroEstadoActual === estado) {
+    filtroEstadoActual = null; // Quitar filtro si ya estaba activo
+  } else {
+    filtroEstadoActual = estado;
+  }
+  renderizarOrdenes();
+}
+
+// ==================== ÓRDENES ====================
+function cargarOrdenes() {
+  google.script.run
+    .withSuccessHandler(function(ordenes) {
+      ordenesCache = ordenes;
+      renderizarOrdenes();
+    })
+    .withFailureHandler(function(error) {
+      document.getElementById('tbody-ordenes').innerHTML =
+        '<tr><td colspan="8" class="sin-datos">Error al cargar órdenes: ' + error.message + '</td></tr>';
+    })
+    .obtenerOrdenes(null);
+}
+
+function renderizarOrdenes() {
+  var tbody = document.getElementById('tbody-ordenes');
+  var ordenes = ordenesCache;
+
+  // Aplicar filtro de estado si existe
+  if (filtroEstadoActual) {
+    ordenes = ordenes.filter(function(o) {
+      return o.estado === filtroEstadoActual;
+    });
+  }
+
+  if (ordenes.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="sin-datos">No hay órdenes' +
+      (filtroEstadoActual ? ' con estado "' + filtroEstadoActual + '"' : '') + '</td></tr>';
+    return;
+  }
+
+  var html = '';
+  for (var i = 0; i < ordenes.length; i++) {
+    var o = ordenes[i];
+    var badgeClass = obtenerClaseBadge(o.estado);
+
+    var fechaHtml = o.fecha;
+    if (o.estado === 'Prestado' && o.fecha_limite_devolucion) {
+      fechaHtml += '<br><small class="texto-rojo">Límite: ' + o.fecha_limite_devolucion.substring(0, 10) + '</small>';
+    }
+
+    html += '<tr>' +
+      '<td><strong>' + o.numero_op + '</strong></td>' +
+      '<td>' + fechaHtml + '</td>' +
+      '<td>' + o.nombre_cliente + '</td>' +
+      '<td>' + o.nombre_vendedor + '</td>' +
+      '<td>$' + formatearNumero(0) + '</td>' +
+      '<td>' + o.hora_creacion + '</td>' +
+      '<td><span class="badge ' + badgeClass + '">' + o.estado + '</span></td>' +
+      '<td><button class="btn-accion" onclick="verOrden(' + o.id_op + ')">' +
+      '<span class="material-icons">visibility</span> Ver</button></td>' +
+      '</tr>';
+  }
+
+  tbody.innerHTML = html;
+}
+
+function obtenerClaseBadge(estado) {
+  var clases = {
+    'Pendiente': 'badge-pendiente',
+    'Prestado': 'badge-prestado',
+    'Por Cobrar/Devolver': 'badge-porcobrar',
+    'Facturado': 'badge-facturado',
+    'Regresado': 'badge-regresado'
+  };
+  return clases[estado] || '';
+}
+
+function formatearNumero(num) {
+  return Number(num).toLocaleString('es-CO');
+}
+
+// ==================== VER / GESTIONAR ORDEN ====================
+function verOrden(idOp) {
+  // Buscar orden en cache
+  var orden = null;
+  for (var i = 0; i < ordenesCache.length; i++) {
+    if (ordenesCache[i].id_op == idOp) {
+      orden = ordenesCache[i];
+      break;
+    }
+  }
+
+  if (!orden) return;
+  ordenSeleccionada = orden;
+
+  // Llenar datos del modal
+  document.getElementById('modal-titulo-op').textContent = 'Orden ' + orden.numero_op;
+  document.getElementById('ver-numero-op').textContent = orden.numero_op;
+  document.getElementById('ver-fecha').textContent = orden.fecha;
+  document.getElementById('ver-fecha-prestamo').textContent = orden.fecha_prestamo || '—';
+  document.getElementById('ver-fecha-limite').textContent = orden.fecha_limite_devolucion || '—';
+  document.getElementById('ver-cliente').textContent = orden.nombre_cliente;
+  document.getElementById('ver-vendedor').textContent = orden.nombre_vendedor;
+  document.getElementById('ver-local').textContent = orden.local_origen;
+  document.getElementById('ver-observaciones').textContent = orden.observaciones || 'Sin observaciones';
+
+  // Badge de estado
+  var badgeEstado = document.getElementById('ver-estado-badge');
+  badgeEstado.textContent = orden.estado;
+  badgeEstado.className = 'badge ' + obtenerClaseBadge(orden.estado);
+
+  // Cargar detalle de productos
+  google.script.run
+    .withSuccessHandler(function(detalle) {
+      renderizarDetalleOrden(detalle);
+    })
+    .obtenerDetalleOrden(idOp);
+
+  // Generar botones de transición según estado
+  generarBotonesTransicion(orden.estado, idOp);
+
+  // Mostrar modal
+  document.getElementById('modal-ver-orden').style.display = 'flex';
+}
+
+function renderizarDetalleOrden(detalle) {
+  var tbody = document.getElementById('tbody-detalle-orden');
+  var totalOrden = 0;
+
+  if (detalle.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="sin-datos">Sin productos</td></tr>';
+    return;
+  }
+
+  var html = '';
+  for (var i = 0; i < detalle.length; i++) {
+    var d = detalle[i];
+    totalOrden += d.valor_total || 0;
+    var badgeItem = obtenerClaseBadge(d.estado_item);
+
+    html += '<tr>' +
+      '<td>' + (d.id_producto || '—') + '</td>' +
+      '<td>' + d.descripcion_libre + '</td>' +
+      '<td>' + d.cantidad + '</td>' +
+      '<td>$' + formatearNumero(d.valor_unitario) + '</td>' +
+      '<td>$' + formatearNumero(d.valor_total) + '</td>' +
+      '<td><span class="badge ' + badgeItem + '">' + d.estado_item + '</span></td>' +
+      '</tr>';
+  }
+
+  tbody.innerHTML = html;
+  document.getElementById('ver-total-orden').innerHTML = '<strong>$' + formatearNumero(totalOrden) + '</strong>';
+}
+
+function generarBotonesTransicion(estadoActual, idOp) {
+  var container = document.getElementById('botones-transicion');
+  var html = '';
+
+  if (estadoActual === 'Pendiente') {
+    html = '<button class="btn-estado btn-estado-prestado" onclick="cambiarEstado(' + idOp + ', \'Prestado\')">Marcar como Prestado</button>';
+  } else if (estadoActual === 'Prestado' || estadoActual === 'Por Cobrar/Devolver') {
+    html = '<button class="btn-estado btn-estado-facturado" onclick="cambiarEstado(' + idOp + ', \'Facturado\')">Marcar como Facturado</button>' +
+           '<button class="btn-estado btn-estado-regresado" onclick="cambiarEstado(' + idOp + ', \'Regresado\')">Marcar como Regresado</button>';
+  } else if (estadoActual === 'Facturado') {
+    html = '<button class="btn-estado btn-estado-regresado" onclick="cambiarEstado(' + idOp + ', \'Regresado\')">Marcar como Regresado</button>';
+  } else if (estadoActual === 'Regresado') {
+    html = '<p style="color:#999; font-size:13px;">Orden cerrada — no hay más transiciones disponibles.</p>';
+  }
+
+  container.innerHTML = html;
+}
+
+function cambiarEstado(idOp, nuevoEstado) {
+  var observaciones = document.getElementById('ver-observaciones-cambio').value.trim();
+
+  if (!confirm('¿Cambiar estado a "' + nuevoEstado + '"?')) return;
+
+  google.script.run
+    .withSuccessHandler(function(resultado) {
+      if (resultado.success) {
+        alert('Estado actualizado a: ' + nuevoEstado);
+        cerrarModal('modal-ver-orden');
+        cargarOrdenes();
+        cargarContadores();
+      } else {
+        alert('Error: ' + resultado.mensaje);
+      }
+    })
+    .withFailureHandler(function(error) {
+      alert('Error: ' + error.message);
+    })
+    .actualizarEstadoOrden(idOp, nuevoEstado, observaciones);
+}
+
+// ==================== NUEVA ORDEN ====================
+function abrirModalNuevaOrden() {
+  itemsNuevaOrden = [];
+  document.getElementById('nueva-orden-cliente').value = '';
+  document.getElementById('nueva-orden-id-cliente').value = '';
+  document.getElementById('nueva-orden-local').value = '';
+  document.getElementById('nueva-orden-observaciones').value = '';
+  document.getElementById('item-descripcion').value = '';
+  document.getElementById('item-cantidad').value = '1';
+  document.getElementById('item-valor').value = '';
+  renderizarItemsNuevaOrden();
+
+  // Cargar lista de clientes para autocomplete
+  cargarClientesAutocomplete();
+
+  document.getElementById('modal-nueva-orden').style.display = 'flex';
+}
+
+function cargarClientesAutocomplete() {
+  var datalist = document.getElementById('lista-clientes');
+  datalist.innerHTML = '';
+  for (var i = 0; i < clientesCache.length; i++) {
+    var option = document.createElement('option');
+    option.value = clientesCache[i].nombre_local;
+    option.dataset.id = clientesCache[i].id_cliente;
+    datalist.appendChild(option);
+  }
+}
+
+function buscarClienteAutocomplete() {
+  var input = document.getElementById('nueva-orden-cliente').value;
+  var hiddenInput = document.getElementById('nueva-orden-id-cliente');
+
+  for (var i = 0; i < clientesCache.length; i++) {
+    if (clientesCache[i].nombre_local === input) {
+      hiddenInput.value = clientesCache[i].id_cliente;
+      return;
+    }
+  }
+  hiddenInput.value = '';
+}
+
+function agregarItem() {
+  var desc = document.getElementById('item-descripcion').value.trim();
+  var cant = parseInt(document.getElementById('item-cantidad').value) || 0;
+  var valor = parseFloat(document.getElementById('item-valor').value) || 0;
+
+  if (!desc) {
+    alert('Ingrese la descripción del producto');
+    return;
+  }
+  if (cant <= 0) {
+    alert('La cantidad debe ser mayor a 0');
+    return;
+  }
+
+  itemsNuevaOrden.push({
+    descripcion_libre: desc,
+    cantidad: cant,
+    valor_unitario: valor,
+    valor_total: cant * valor
+  });
+
+  // Limpiar campos
+  document.getElementById('item-descripcion').value = '';
+  document.getElementById('item-cantidad').value = '1';
+  document.getElementById('item-valor').value = '';
+  document.getElementById('item-descripcion').focus();
+
+  renderizarItemsNuevaOrden();
+}
+
+function eliminarItem(index) {
+  itemsNuevaOrden.splice(index, 1);
+  renderizarItemsNuevaOrden();
+}
+
+function renderizarItemsNuevaOrden() {
+  var tbody = document.getElementById('tbody-items');
+  var total = 0;
+
+  if (itemsNuevaOrden.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="sin-datos">Agregue productos a la orden</td></tr>';
+    document.getElementById('total-items').innerHTML = '<strong>$0</strong>';
+    return;
+  }
+
+  var html = '';
+  for (var i = 0; i < itemsNuevaOrden.length; i++) {
+    var item = itemsNuevaOrden[i];
+    total += item.valor_total;
+
+    html += '<tr>' +
+      '<td>' + item.descripcion_libre + '</td>' +
+      '<td>' + item.cantidad + '</td>' +
+      '<td>$' + formatearNumero(item.valor_unitario) + '</td>' +
+      '<td>$' + formatearNumero(item.valor_total) + '</td>' +
+      '<td><button class="btn-eliminar-item" onclick="eliminarItem(' + i + ')">' +
+      '<span class="material-icons">delete</span></button></td>' +
+      '</tr>';
+  }
+
+  tbody.innerHTML = html;
+  document.getElementById('total-items').innerHTML = '<strong>$' + formatearNumero(total) + '</strong>';
+}
+
+function guardarNuevaOrden() {
+  var idCliente = document.getElementById('nueva-orden-id-cliente').value;
+  var local = document.getElementById('nueva-orden-local').value.trim();
+  var obs = document.getElementById('nueva-orden-observaciones').value.trim();
+
+  if (!idCliente) {
+    alert('Seleccione un cliente de la lista');
+    return;
+  }
+  if (itemsNuevaOrden.length === 0) {
+    alert('Agregue al menos un producto a la orden');
+    return;
+  }
+
+  var datosOrden = {
+    id_cliente: parseInt(idCliente),
+    id_vendedor: usuarioActual.id_usuario,
+    local_origen: local,
+    observaciones: obs
+  };
+
+  google.script.run
+    .withSuccessHandler(function(resultado) {
+      if (resultado.success) {
+        alert('Orden creada: ' + resultado.numero_op);
+        cerrarModal('modal-nueva-orden');
+        cargarOrdenes();
+        cargarContadores();
+      } else {
+        alert('Error al crear la orden');
+      }
+    })
+    .withFailureHandler(function(error) {
+      alert('Error: ' + error.message);
+    })
+    .crearOrden(datosOrden, itemsNuevaOrden);
+}
+
+// ==================== CLIENTES ====================
+function cargarClientes() {
+  google.script.run
+    .withSuccessHandler(function(clientes) {
+      clientesCache = clientes;
+      renderizarClientes(clientes);
+    })
+    .obtenerClientes();
+}
+
+function renderizarClientes(clientes) {
+  var tbody = document.getElementById('tbody-clientes');
+
+  if (clientes.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="sin-datos">No hay clientes registrados</td></tr>';
+    return;
+  }
+
+  var html = '';
+  for (var i = 0; i < clientes.length; i++) {
+    var c = clientes[i];
+    html += '<tr>' +
+      '<td>' + c.id_cliente + '</td>' +
+      '<td>' + c.nombre_local + '</td>' +
+      '<td>' + c.contacto + '</td>' +
+      '<td>' + c.telefono + '</td>' +
+      '<td>' + c.ciudad + '</td>' +
+      '</tr>';
+  }
+
+  tbody.innerHTML = html;
+}
+
+function buscarClientes() {
+  var termino = document.getElementById('buscar-cliente').value.toLowerCase();
+  var filtrados = clientesCache.filter(function(c) {
+    return c.nombre_local.toLowerCase().indexOf(termino) !== -1 ||
+           (c.contacto && c.contacto.toLowerCase().indexOf(termino) !== -1) ||
+           (c.ciudad && c.ciudad.toLowerCase().indexOf(termino) !== -1);
+  });
+  renderizarClientes(filtrados);
+}
+
+function abrirModalNuevoCliente() {
+  document.getElementById('cliente-nombre').value = '';
+  document.getElementById('cliente-contacto').value = '';
+  document.getElementById('cliente-telefono').value = '';
+  document.getElementById('cliente-ciudad').value = 'Cali';
+  document.getElementById('modal-nuevo-cliente').style.display = 'flex';
+}
+
+function guardarNuevoCliente() {
+  var nombre = document.getElementById('cliente-nombre').value.trim();
+  if (!nombre) {
+    alert('El nombre del local es obligatorio');
+    return;
+  }
+
+  var datos = {
+    nombre_local: nombre,
+    contacto: document.getElementById('cliente-contacto').value.trim(),
+    telefono: document.getElementById('cliente-telefono').value.trim(),
+    ciudad: document.getElementById('cliente-ciudad').value.trim()
+  };
+
+  google.script.run
+    .withSuccessHandler(function(resultado) {
+      if (resultado.success) {
+        alert('Cliente creado exitosamente');
+        cerrarModal('modal-nuevo-cliente');
+        cargarClientes();
+      }
+    })
+    .withFailureHandler(function(error) {
+      alert('Error: ' + error.message);
+    })
+    .crearCliente(datos);
+}
+
+// ==================== USUARIOS ====================
+function cargarUsuarios() {
+  google.script.run
+    .withSuccessHandler(function(usuarios) {
+      var tbody = document.getElementById('tbody-usuarios');
+
+      if (usuarios.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="sin-datos">No hay usuarios</td></tr>';
+        return;
+      }
+
+      var html = '';
+      for (var i = 0; i < usuarios.length; i++) {
+        var u = usuarios[i];
+        html += '<tr>' +
+          '<td>' + u.id_usuario + '</td>' +
+          '<td>' + u.nombre + '</td>' +
+          '<td>' + u.email + '</td>' +
+          '<td>' + u.rol + '</td>' +
+          '<td>' + u.local_asignado + '</td>' +
+          '<td>' + u.activo + '</td>' +
+          '</tr>';
+      }
+
+      tbody.innerHTML = html;
+    })
+    .obtenerUsuarios();
+}
+
+function abrirModalNuevoUsuario() {
+  document.getElementById('usuario-nombre-input').value = '';
+  document.getElementById('usuario-email').value = '';
+  document.getElementById('usuario-password').value = '';
+  document.getElementById('usuario-rol').value = 'Vendedor';
+  document.getElementById('usuario-local').value = '';
+  document.getElementById('modal-nuevo-usuario').style.display = 'flex';
+}
+
+function guardarNuevoUsuario() {
+  var nombre = document.getElementById('usuario-nombre-input').value.trim();
+  var email = document.getElementById('usuario-email').value.trim();
+  var password = document.getElementById('usuario-password').value;
+
+  if (!nombre || !email || !password) {
+    alert('Nombre, email y contraseña son obligatorios');
+    return;
+  }
+
+  var datos = {
+    nombre: nombre,
+    email: email,
+    password: password,
+    rol: document.getElementById('usuario-rol').value,
+    local_asignado: document.getElementById('usuario-local').value.trim()
+  };
+
+  google.script.run
+    .withSuccessHandler(function(resultado) {
+      if (resultado.success) {
+        alert('Usuario creado exitosamente');
+        cerrarModal('modal-nuevo-usuario');
+        cargarUsuarios();
+      }
+    })
+    .withFailureHandler(function(error) {
+      alert('Error: ' + error.message);
+    })
+    .crearUsuario(datos);
+}
+
+// ==================== REPORTES ====================
+function descargarExcel() {
+  var filtros = {
+    fecha_inicio: document.getElementById('filtro-fecha-inicio').value,
+    fecha_fin: document.getElementById('filtro-fecha-fin').value,
+    estado: document.getElementById('filtro-estado').value,
+    id_vendedor: document.getElementById('filtro-vendedor').value
+  };
+
+  google.script.run
+    .withSuccessHandler(function(resultado) {
+      if (resultado.success) {
+        window.open(resultado.url, '_blank');
+      } else {
+        alert('Error al generar el reporte');
+      }
+    })
+    .withFailureHandler(function(error) {
+      alert('Error: ' + error.message);
+    })
+    .generarReporteExcel(filtros);
+}
+
+// ==================== IMPRESIÓN PDF ====================
+function imprimirOrden() {
+  window.print();
+}
+
+// ==================== UTILIDADES ====================
+function cerrarModal(idModal) {
+  document.getElementById(idModal).style.display = 'none';
+}
+
+// Cerrar modal al hacer clic fuera
+document.addEventListener('click', function(e) {
+  if (e.target.classList.contains('modal-overlay')) {
+    e.target.style.display = 'none';
+  }
+});
+
+// Enter en login
+document.getElementById('login-password').addEventListener('keypress', function(e) {
+  if (e.key === 'Enter') iniciarSesion();
+});
+</script>
