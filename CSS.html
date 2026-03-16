@@ -817,6 +817,44 @@ body {
   color: #d32f2f;
 }
 
+/* ==================== DROPDOWN AUTOCOMPLETE PRODUCTOS ==================== */
+.dropdown-autocomplete {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 500;
+}
+
+.dropdown-item {
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  border-bottom: 1px solid #f0f0f0;
+  transition: background 0.15s;
+}
+
+.dropdown-item:last-child {
+  border-bottom: none;
+}
+
+.dropdown-item:hover {
+  background: #fffde7;
+}
+
+.dropdown-item-empty {
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #999;
+  text-align: center;
+}
+
 /* ==================== IMPRESIÓN PDF ==================== */
 @media print {
   .sidebar, .navbar-tabs, .modal-overlay, .btn-accion,
@@ -1177,8 +1215,9 @@ body {
     display: block;
   }
 
-  /* Tabla clientes y usuarios: hacer scroll horizontal */
+  /* Tabla clientes, productos y usuarios: hacer scroll horizontal */
   #seccion-clientes .tabla-principal,
+  #seccion-productos .tabla-principal,
   #seccion-usuarios .tabla-principal {
     display: block;
     overflow-x: auto;

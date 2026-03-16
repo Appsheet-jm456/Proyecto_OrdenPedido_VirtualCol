@@ -507,6 +507,8 @@ function crearCliente(datos) {
 // ============================================================
 // CRUD — PRODUCTOS
 // ============================================================
+
+// Obtener solo productos activos (para autocomplete en órdenes)
 function obtenerProductos() {
   var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   var hoja = ss.getSheetByName('Productos');
@@ -524,6 +526,83 @@ function obtenerProductos() {
     }
   }
   return resultado;
+}
+
+// Obtener todos los productos (activos e inactivos) para gestión admin
+function listarProductos() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var hoja = ss.getSheetByName('Productos');
+  var datos = hoja.getDataRange().getValues();
+  var encabezados = datos[0];
+  var resultado = [];
+
+  for (var i = 1; i < datos.length; i++) {
+    var obj = {};
+    for (var j = 0; j < encabezados.length; j++) {
+      obj[encabezados[j]] = datos[i][j];
+    }
+    // Saltar filas vacías
+    if (obj.id_producto || obj.id_producto === 0) {
+      resultado.push(obj);
+    }
+  }
+  return resultado;
+}
+
+// Crear nuevo producto
+function crearProducto(datos) {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var hoja = ss.getSheetByName('Productos');
+  var ultimaFila = hoja.getLastRow();
+  var nuevoId = ultimaFila; // ID = número de fila - 1
+
+  var fila = [
+    nuevoId,
+    datos.nombre,
+    datos.categoria || '',
+    datos.descripcion || '',
+    datos.precio_ref || 0,
+    datos.activo || 'Sí'
+  ];
+
+  hoja.appendRow(fila);
+  return { success: true, id_producto: nuevoId };
+}
+
+// Actualizar producto existente
+function actualizarProducto(idProducto, datos) {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var hoja = ss.getSheetByName('Productos');
+  var filas = hoja.getDataRange().getValues();
+
+  for (var i = 1; i < filas.length; i++) {
+    if (String(filas[i][0]) === String(idProducto)) {
+      var fila = i + 1; // Fila en la hoja (1-indexed)
+      hoja.getRange(fila, 2).setValue(datos.nombre);
+      hoja.getRange(fila, 3).setValue(datos.categoria || '');
+      hoja.getRange(fila, 4).setValue(datos.descripcion || '');
+      hoja.getRange(fila, 5).setValue(datos.precio_ref || 0);
+      hoja.getRange(fila, 6).setValue(datos.activo || 'Sí');
+      return { success: true };
+    }
+  }
+  return { success: false, mensaje: 'Producto no encontrado' };
+}
+
+// Desactivar producto (soft-delete)
+function desactivarProducto(idProducto) {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var hoja = ss.getSheetByName('Productos');
+  var filas = hoja.getDataRange().getValues();
+
+  for (var i = 1; i < filas.length; i++) {
+    if (String(filas[i][0]) === String(idProducto)) {
+      var fila = i + 1;
+      hoja.getRange(fila, 6).setValue('No'); // columna activo
+      return { success: true };
+    }
+  }
+  return { success: false, mensaje: 'Producto no encontrado' };
 }
 
 // ============================================================

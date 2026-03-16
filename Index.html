@@ -79,6 +79,7 @@
         <div class="tabs">
           <button class="tab activa" data-tab="ordenes" onclick="cambiarTab('ordenes')">Órdenes de Pedido</button>
           <button class="tab" data-tab="clientes" onclick="cambiarTab('clientes')">Clientes</button>
+          <button class="tab" data-tab="productos" id="tab-productos" style="display:none;" onclick="cambiarTab('productos')">Productos</button>
           <button class="tab" data-tab="usuarios" id="tab-usuarios" style="display:none;" onclick="cambiarTab('usuarios')">Usuarios</button>
           <button class="tab" data-tab="reportes" id="tab-reportes" style="display:none;" onclick="cambiarTab('reportes')">Reportes</button>
         </div>
@@ -171,6 +172,31 @@
           </thead>
           <tbody id="tbody-clientes">
             <tr><td colspan="5" class="sin-datos">Cargando clientes...</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Tab: Productos (Super admin y Auxiliar) -->
+      <section id="seccion-productos" class="seccion-tab" style="display:none;">
+        <div class="seccion-header">
+          <input type="text" id="buscar-producto" placeholder="Buscar por nombre o categoría..." class="input-busqueda" oninput="buscarProductos()">
+          <button class="btn-nueva-orden" onclick="abrirModalNuevoProducto()">
+            <span class="material-icons">add</span> Nuevo Producto
+          </button>
+        </div>
+        <table class="tabla-principal" id="tabla-productos">
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Categoría</th>
+              <th>Descripción</th>
+              <th>Precio ref.</th>
+              <th>Activo</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-productos">
+            <tr><td colspan="6" class="sin-datos">Cargando productos...</td></tr>
           </tbody>
         </table>
       </section>
@@ -317,7 +343,41 @@
 
         <h4>Productos / Ítems</h4>
         <div class="items-agregar">
-          <div class="form-grid form-grid-items">
+          <!-- Buscador de productos con autocomplete -->
+          <div class="campo-form" style="margin-bottom:8px; position:relative;">
+            <input type="text" id="item-buscar-producto" placeholder="Buscar producto existente..." oninput="buscarProductoAutocomplete()" autocomplete="off">
+            <div id="dropdown-productos" class="dropdown-autocomplete" style="display:none;"></div>
+          </div>
+          <!-- Enlace para crear producto nuevo inline -->
+          <a href="javascript:void(0)" id="btn-toggle-nuevo-producto-inline" class="enlace-nuevo-cliente" onclick="toggleFormNuevoProductoInline()" style="margin-bottom:10px;">
+            <span class="material-icons" style="font-size:16px; vertical-align:middle;">add</span> Crear nuevo producto
+          </a>
+          <!-- Mini-formulario inline para crear producto -->
+          <div id="form-nuevo-producto-inline" class="form-cliente-inline" style="display:none;">
+            <div class="form-cliente-inline-grid">
+              <div class="campo-form">
+                <label>Nombre del producto *</label>
+                <input type="text" id="inline-producto-nombre" placeholder="Nombre del producto">
+              </div>
+              <div class="campo-form">
+                <label>Categoría</label>
+                <input type="text" id="inline-producto-categoria" placeholder="Ej: Torre, Tiny PC">
+              </div>
+              <div class="campo-form">
+                <label>Precio referencia</label>
+                <input type="number" id="inline-producto-precio" placeholder="0" min="0">
+              </div>
+            </div>
+            <div class="form-cliente-inline-acciones">
+              <button type="button" class="btn-guardar-cliente-inline" id="btn-guardar-producto-inline" onclick="guardarProductoInline()">
+                <span class="material-icons" style="font-size:16px; vertical-align:middle;">save</span> Guardar producto
+              </button>
+              <button type="button" class="btn-cancelar-cliente-inline" onclick="toggleFormNuevoProductoInline()">Cancelar</button>
+            </div>
+            <div id="inline-producto-mensaje" class="inline-cliente-mensaje" style="display:none;"></div>
+          </div>
+          <!-- Campos de ítem -->
+          <div class="form-grid form-grid-items" style="margin-top:10px;">
             <input type="text" id="item-descripcion" placeholder="Descripción del producto">
             <input type="number" id="item-cantidad" placeholder="Cant" min="1" value="1">
             <input type="number" id="item-valor" placeholder="Valor unitario" min="0">
@@ -507,6 +567,52 @@
       <div class="modal-footer">
         <button class="btn-secundario" onclick="cerrarModal('modal-nuevo-usuario')">Cancelar</button>
         <button class="btn-principal" onclick="guardarNuevoUsuario()">Guardar Usuario</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL: Nuevo/Editar Producto ==================== -->
+  <div id="modal-producto" class="modal-overlay" style="display:none;">
+    <div class="modal-contenido">
+      <div class="modal-header">
+        <h3 id="modal-producto-titulo">Nuevo Producto</h3>
+        <button class="btn-cerrar-modal" onclick="cerrarModal('modal-producto')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="producto-id">
+        <div class="campo-form">
+          <label>Nombre *</label>
+          <input type="text" id="producto-nombre" placeholder="Nombre del producto" required>
+        </div>
+        <div class="campo-form">
+          <label>Categoría</label>
+          <input type="text" id="producto-categoria" placeholder="Ej: Torre, Tiny PC, Mini PC, Portátil, Accesorio" list="lista-categorias">
+          <datalist id="lista-categorias">
+            <option value="Torre">
+            <option value="Tiny PC">
+            <option value="Mini PC">
+            <option value="Portátil">
+            <option value="Accesorio">
+          </datalist>
+        </div>
+        <div class="campo-form">
+          <label>Descripción</label>
+          <textarea id="producto-descripcion" rows="3" placeholder="Descripción del producto..."></textarea>
+        </div>
+        <div class="campo-form">
+          <label>Precio de referencia</label>
+          <input type="number" id="producto-precio" placeholder="0" min="0">
+        </div>
+        <div class="campo-form">
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+            <input type="checkbox" id="producto-activo" checked style="width:auto; min-height:auto;">
+            Producto activo
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secundario" onclick="cerrarModal('modal-producto')">Cancelar</button>
+        <button class="btn-principal" id="btn-guardar-producto" onclick="guardarProducto()">Guardar Producto</button>
       </div>
     </div>
   </div>
