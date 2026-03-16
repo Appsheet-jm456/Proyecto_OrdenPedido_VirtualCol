@@ -230,6 +230,38 @@
             <input type="text" id="nueva-orden-cliente" placeholder="Buscar cliente..." list="lista-clientes" oninput="buscarClienteAutocomplete()">
             <datalist id="lista-clientes"></datalist>
             <input type="hidden" id="nueva-orden-id-cliente">
+            <!-- Enlace para crear cliente nuevo inline -->
+            <a href="javascript:void(0)" id="btn-toggle-nuevo-cliente" class="enlace-nuevo-cliente" onclick="toggleFormNuevoClienteInline()">
+              <span class="material-icons" style="font-size:16px; vertical-align:middle;">add</span> Crear nuevo cliente
+            </a>
+            <!-- Mini-formulario inline para crear cliente -->
+            <div id="form-nuevo-cliente-inline" class="form-cliente-inline" style="display:none;">
+              <div class="form-cliente-inline-grid">
+                <div class="campo-form">
+                  <label>Nombre del local *</label>
+                  <input type="text" id="inline-cliente-nombre" placeholder="Nombre del local">
+                </div>
+                <div class="campo-form">
+                  <label>Contacto</label>
+                  <input type="text" id="inline-cliente-contacto" placeholder="Persona de contacto">
+                </div>
+                <div class="campo-form">
+                  <label>Teléfono</label>
+                  <input type="tel" id="inline-cliente-telefono" placeholder="Teléfono">
+                </div>
+                <div class="campo-form">
+                  <label>Ciudad</label>
+                  <input type="text" id="inline-cliente-ciudad" placeholder="Ciudad" value="Cali">
+                </div>
+              </div>
+              <div class="form-cliente-inline-acciones">
+                <button type="button" class="btn-guardar-cliente-inline" onclick="guardarClienteInline()">
+                  <span class="material-icons" style="font-size:16px; vertical-align:middle;">save</span> Guardar cliente
+                </button>
+                <button type="button" class="btn-cancelar-cliente-inline" onclick="toggleFormNuevoClienteInline()">Cancelar</button>
+              </div>
+              <div id="inline-cliente-mensaje" class="inline-cliente-mensaje" style="display:none;"></div>
+            </div>
           </div>
           <div class="campo-form">
             <label>Local de origen</label>

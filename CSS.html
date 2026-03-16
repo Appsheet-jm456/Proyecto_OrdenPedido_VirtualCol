@@ -633,6 +633,112 @@ body {
   margin-bottom: 12px;
 }
 
+/* ==================== FORMULARIO INLINE NUEVO CLIENTE ==================== */
+.enlace-nuevo-cliente {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  font-size: 13px;
+  color: #1a1a1a;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.enlace-nuevo-cliente:hover {
+  color: #f0c000;
+}
+
+.form-cliente-inline {
+  margin-top: 10px;
+  padding: 14px;
+  background: #fafafa;
+  border: 1px solid #e8e8e8;
+  border-radius: 10px;
+}
+
+.form-cliente-inline-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.form-cliente-inline-grid .campo-form {
+  margin-bottom: 0;
+}
+
+.form-cliente-inline-grid .campo-form input {
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.form-cliente-inline-acciones {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.btn-guardar-cliente-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  background: #ffcf22;
+  color: #1a1a1a;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-family: 'Inter', sans-serif;
+}
+
+.btn-guardar-cliente-inline:hover {
+  background: #f0c000;
+}
+
+.btn-guardar-cliente-inline:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-cancelar-cliente-inline {
+  padding: 8px 14px;
+  background: none;
+  color: #888;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+}
+
+.btn-cancelar-cliente-inline:hover {
+  background: #f5f5f5;
+}
+
+.inline-cliente-mensaje {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.inline-cliente-mensaje.exito {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.inline-cliente-mensaje.error {
+  background: #fff0f0;
+  color: #d32f2f;
+}
+
 /* ==================== IMPRESIÓN PDF ==================== */
 @media print {
   .sidebar, .navbar-tabs, .modal-overlay, .btn-accion,

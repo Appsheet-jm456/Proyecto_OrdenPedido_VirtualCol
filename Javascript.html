@@ -327,6 +327,11 @@ function abrirModalNuevaOrden() {
   document.getElementById('item-valor').value = '';
   renderizarItemsNuevaOrden();
 
+  // Resetear formulario inline de nuevo cliente
+  document.getElementById('form-nuevo-cliente-inline').style.display = 'none';
+  document.getElementById('btn-toggle-nuevo-cliente').style.display = 'inline-flex';
+  limpiarFormClienteInline();
+
   // Cargar lista de clientes para autocomplete
   cargarClientesAutocomplete();
 
@@ -457,6 +462,117 @@ function guardarNuevaOrden() {
       alert('Error: ' + error.message);
     })
     .crearOrden(datosOrden, itemsNuevaOrden);
+}
+
+// ==================== CREAR CLIENTE INLINE (en modal Nueva Orden) ====================
+
+// Mostrar u ocultar el mini-formulario inline de nuevo cliente
+function toggleFormNuevoClienteInline() {
+  var form = document.getElementById('form-nuevo-cliente-inline');
+  var enlace = document.getElementById('btn-toggle-nuevo-cliente');
+  var visible = form.style.display !== 'none';
+
+  if (visible) {
+    // Ocultar formulario y limpiar campos
+    form.style.display = 'none';
+    enlace.style.display = 'inline-flex';
+    limpiarFormClienteInline();
+  } else {
+    // Mostrar formulario y ocultar enlace
+    form.style.display = 'block';
+    enlace.style.display = 'none';
+    document.getElementById('inline-cliente-nombre').focus();
+  }
+}
+
+// Limpiar campos del formulario inline
+function limpiarFormClienteInline() {
+  document.getElementById('inline-cliente-nombre').value = '';
+  document.getElementById('inline-cliente-contacto').value = '';
+  document.getElementById('inline-cliente-telefono').value = '';
+  document.getElementById('inline-cliente-ciudad').value = 'Cali';
+  var msg = document.getElementById('inline-cliente-mensaje');
+  msg.style.display = 'none';
+  msg.className = 'inline-cliente-mensaje';
+}
+
+// Guardar cliente desde el formulario inline y seleccionarlo en la orden
+function guardarClienteInline() {
+  var nombre = document.getElementById('inline-cliente-nombre').value.trim();
+  var msgDiv = document.getElementById('inline-cliente-mensaje');
+
+  if (!nombre) {
+    msgDiv.textContent = 'El nombre del local es obligatorio';
+    msgDiv.className = 'inline-cliente-mensaje error';
+    msgDiv.style.display = 'block';
+    return;
+  }
+
+  var datos = {
+    nombre_local: nombre,
+    contacto: document.getElementById('inline-cliente-contacto').value.trim(),
+    telefono: document.getElementById('inline-cliente-telefono').value.trim(),
+    ciudad: document.getElementById('inline-cliente-ciudad').value.trim()
+  };
+
+  // Deshabilitar botón mientras se guarda
+  var btnGuardar = document.querySelector('.btn-guardar-cliente-inline');
+  btnGuardar.disabled = true;
+  btnGuardar.innerHTML = '<span class="material-icons" style="font-size:16px; vertical-align:middle;">hourglass_empty</span> Guardando...';
+
+  google.script.run
+    .withSuccessHandler(function(resultado) {
+      if (resultado.success) {
+        // Agregar el nuevo cliente al cache local
+        var nuevoCliente = {
+          id_cliente: resultado.id_cliente,
+          nombre_local: datos.nombre_local,
+          contacto: datos.contacto,
+          telefono: datos.telefono,
+          ciudad: datos.ciudad
+        };
+        clientesCache.push(nuevoCliente);
+
+        // Seleccionar automáticamente el cliente nuevo en el campo de la orden
+        document.getElementById('nueva-orden-cliente').value = datos.nombre_local;
+        document.getElementById('nueva-orden-id-cliente').value = resultado.id_cliente;
+
+        // Actualizar datalist con el nuevo cliente
+        cargarClientesAutocomplete();
+
+        // Mostrar mensaje de éxito brevemente
+        msgDiv.textContent = 'Cliente "' + datos.nombre_local + '" creado y seleccionado';
+        msgDiv.className = 'inline-cliente-mensaje exito';
+        msgDiv.style.display = 'block';
+
+        // Colapsar el formulario después de 1.5 segundos
+        setTimeout(function() {
+          var form = document.getElementById('form-nuevo-cliente-inline');
+          var enlace = document.getElementById('btn-toggle-nuevo-cliente');
+          form.style.display = 'none';
+          enlace.style.display = 'inline-flex';
+          limpiarFormClienteInline();
+        }, 1500);
+      } else {
+        msgDiv.textContent = 'Error al crear el cliente';
+        msgDiv.className = 'inline-cliente-mensaje error';
+        msgDiv.style.display = 'block';
+      }
+
+      // Rehabilitar botón
+      btnGuardar.disabled = false;
+      btnGuardar.innerHTML = '<span class="material-icons" style="font-size:16px; vertical-align:middle;">save</span> Guardar cliente';
+    })
+    .withFailureHandler(function(error) {
+      msgDiv.textContent = 'Error: ' + error.message;
+      msgDiv.className = 'inline-cliente-mensaje error';
+      msgDiv.style.display = 'block';
+
+      // Rehabilitar botón
+      btnGuardar.disabled = false;
+      btnGuardar.innerHTML = '<span class="material-icons" style="font-size:16px; vertical-align:middle;">save</span> Guardar cliente';
+    })
+    .crearCliente(datos);
 }
 
 // ==================== CLIENTES ====================
