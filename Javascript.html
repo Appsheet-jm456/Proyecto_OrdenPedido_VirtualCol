@@ -14,6 +14,84 @@ var itemsNuevaOrden = [];
 var ordenSeleccionada = null;
 var filtroEstadoActual = null;
 var itemProductoSeleccionado = ''; // id_producto del autocomplete (vacío si texto libre)
+window.appConfig = {}; // Configuración global del negocio
+
+// ==================== CARGA INICIAL DE CONFIGURACIÓN ====================
+// Se ejecuta al cargar la página, antes de mostrar el login
+(function cargarConfigInicial() {
+  var timeout = setTimeout(function() {
+    // Si tarda más de 3 segundos, mostrar login con valores por defecto
+    mostrarLoginConConfig();
+  }, 3000);
+
+  google.script.run
+    .withSuccessHandler(function(config) {
+      clearTimeout(timeout);
+      window.appConfig = config;
+      mostrarLoginConConfig();
+    })
+    .withFailureHandler(function() {
+      clearTimeout(timeout);
+      // Usar valores por defecto
+      window.appConfig = {
+        nombre_comercial: 'Ventas Virtuales Colombia',
+        direccion: 'Av 5 a # 23 D Norte - 66 Ctro Comercial Pasarela Local 2 - 107',
+        celular: '3175591252',
+        correo: 'rafyta1995@gmail.com',
+        logo_url: '',
+        ciudad: 'Cali, Colombia',
+        nombre_juridico: 'Rafael Alfonso Perez Chavarro'
+      };
+      mostrarLoginConConfig();
+    })
+    .getConfiguracion();
+})();
+
+// Renderizar login con datos de configuración
+function mostrarLoginConConfig() {
+  var config = window.appConfig;
+
+  // Ocultar spinner, mostrar contenido
+  var loading = document.getElementById('login-loading');
+  var contenido = document.getElementById('login-contenido');
+  if (loading) loading.style.display = 'none';
+  if (contenido) contenido.style.display = 'block';
+
+  // Logo dinámico
+  if (config.logo_url) {
+    var imgLogin = document.getElementById('login-logo-img');
+    imgLogin.src = config.logo_url;
+    imgLogin.onload = function() { imgLogin.style.display = 'block'; };
+    imgLogin.onerror = function() { imgLogin.style.display = 'none'; };
+  }
+
+  // Nombre comercial
+  if (config.nombre_comercial) {
+    var partes = config.nombre_comercial.split(' ');
+    // Intentar partir el nombre en dos líneas si tiene más de 2 palabras
+    var nombreEl = document.getElementById('login-nombre-comercial');
+    if (partes.length > 2) {
+      var mitad = Math.ceil(partes.length / 2);
+      nombreEl.innerHTML = partes.slice(0, mitad).join(' ') + '<br>' + partes.slice(mitad).join(' ');
+    } else {
+      nombreEl.textContent = config.nombre_comercial;
+    }
+  }
+
+  // Ciudad
+  if (config.ciudad) {
+    document.getElementById('login-ciudad').textContent = config.ciudad;
+  }
+
+  // Footer con dirección y celular
+  if (config.direccion || config.celular) {
+    var footer = document.getElementById('login-footer');
+    var html = '';
+    if (config.direccion) html += config.direccion;
+    if (config.celular) html += '<br>Cel: ' + config.celular;
+    footer.innerHTML = html;
+  }
+}
 
 // ==================== AUTENTICACIÓN ====================
 function iniciarSesion() {
@@ -71,16 +149,73 @@ function mostrarDashboard() {
     document.getElementById('tab-productos').style.display = 'inline-block';
     document.getElementById('tab-usuarios').style.display = 'inline-block';
     document.getElementById('tab-reportes').style.display = 'inline-block';
+    document.getElementById('tab-configuracion').style.display = 'inline-block';
   } else if (usuarioActual.rol === 'Auxiliar') {
     document.getElementById('tab-productos').style.display = 'inline-block';
     document.getElementById('tab-reportes').style.display = 'inline-block';
   }
+
+  // Aplicar configuración al sidebar y mobile header
+  aplicarConfigDashboard();
 
   cargarContadores();
   cargarOrdenes();
   cargarClientes();
   cargarProductosCache();
   cargarVendedoresReporte();
+}
+
+// Aplicar datos de appConfig al sidebar, navbar y mobile header
+function aplicarConfigDashboard() {
+  var config = window.appConfig;
+
+  // Logo en sidebar
+  if (config.logo_url) {
+    var sidebarLogo = document.getElementById('sidebar-logo-img');
+    sidebarLogo.src = config.logo_url;
+    sidebarLogo.onload = function() { sidebarLogo.style.display = 'block'; };
+    sidebarLogo.onerror = function() { sidebarLogo.style.display = 'none'; };
+  }
+
+  // Nombre en sidebar
+  if (config.nombre_comercial) {
+    var partes = config.nombre_comercial.split(' ');
+    var sidebarNombre = document.getElementById('sidebar-nombre-comercial');
+    if (partes.length > 2) {
+      var mitad = Math.ceil(partes.length / 2);
+      sidebarNombre.innerHTML = partes.slice(0, mitad).join(' ') + '<br>' + partes.slice(mitad).join(' ');
+    } else {
+      sidebarNombre.textContent = config.nombre_comercial;
+    }
+  }
+
+  // Mobile header: logo + nombre
+  if (config.logo_url) {
+    var mobileLogo = document.getElementById('mobile-header-logo');
+    mobileLogo.src = config.logo_url;
+    mobileLogo.onload = function() { mobileLogo.style.display = 'inline-block'; };
+    mobileLogo.onerror = function() { mobileLogo.style.display = 'none'; };
+  }
+  if (config.nombre_comercial) {
+    document.getElementById('mobile-header-nombre').textContent = config.nombre_comercial;
+  }
+
+  // Print header para PDF
+  if (config.logo_url) {
+    var printLogo = document.getElementById('print-logo-img');
+    printLogo.src = config.logo_url;
+    printLogo.onerror = function() { printLogo.style.display = 'none'; };
+  }
+  if (config.nombre_comercial) {
+    document.getElementById('print-nombre-comercial').textContent = config.nombre_comercial;
+  }
+  if (config.direccion) {
+    document.getElementById('print-direccion').textContent = config.direccion;
+  }
+  if (config.celular || config.correo) {
+    document.getElementById('print-contacto').textContent =
+      'Cel: ' + (config.celular || '') + ' | ' + (config.correo || '');
+  }
 }
 
 function cambiarTab(tab) {
@@ -105,6 +240,7 @@ function cambiarTab(tab) {
   if (tab === 'clientes') cargarClientes();
   if (tab === 'productos') cargarProductos();
   if (tab === 'usuarios') cargarUsuarios();
+  if (tab === 'configuracion') cargarConfiguracion();
 }
 
 // ==================== CONTADORES ====================
@@ -1442,7 +1578,167 @@ function descargarExcel() {
 
 // ==================== IMPRESIÓN PDF ====================
 function imprimirOrden() {
+  // Actualizar pie de página del PDF con fecha y estado actual
+  var ahora = new Date();
+  var fechaImpresion = ahora.toLocaleDateString('es-CO') + ' ' + ahora.toLocaleTimeString('es-CO');
+  document.getElementById('print-footer-fecha').textContent = 'Fecha de impresión: ' + fechaImpresion;
+  if (ordenSeleccionada) {
+    document.getElementById('print-footer-estado').textContent = 'Estado actual: ' + ordenSeleccionada.estado;
+  }
   window.print();
+}
+
+// ==================== CONFIGURACIÓN (Super admin) ====================
+
+// Cargar configuración en la tabla editable
+function cargarConfiguracion() {
+  google.script.run
+    .withSuccessHandler(function(config) {
+      window.appConfig = config;
+      renderizarTablaConfiguracion(config);
+    })
+    .withFailureHandler(function(error) {
+      var tbody = document.getElementById('tbody-configuracion');
+      tbody.innerHTML = '<tr><td colspan="4" class="sin-datos">Error al cargar configuración</td></tr>';
+    })
+    .getConfiguracion();
+}
+
+// Descripciones de cada parámetro (para mostrar en la tabla)
+var CONFIG_DESCRIPCIONES = {
+  nombre_comercial: 'Nombre visible del negocio',
+  direccion: 'Dirección física',
+  nombre_juridico: 'Nombre persona jurídica',
+  correo: 'Correo de contacto',
+  celular: 'Celular de contacto',
+  logo_url: 'URL pública del logo',
+  ciudad: 'Ciudad del negocio'
+};
+
+// Renderizar tabla editable de configuración
+function renderizarTablaConfiguracion(config) {
+  var tbody = document.getElementById('tbody-configuracion');
+  var parametros = Object.keys(config);
+
+  if (parametros.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="sin-datos">Sin configuración</td></tr>';
+    return;
+  }
+
+  var html = '';
+  for (var i = 0; i < parametros.length; i++) {
+    var param = parametros[i];
+    var valor = config[param] || '';
+    var desc = CONFIG_DESCRIPCIONES[param] || '';
+    var previewHtml = '';
+
+    // Preview de imagen para logo_url
+    if (param === 'logo_url') {
+      previewHtml = '<img class="config-logo-preview" id="config-preview-' + param + '" src="' +
+        escapeHtml(valor) + '" alt="Preview" onerror="this.style.display=\'none\'" ' +
+        (valor ? '' : 'style="display:none"') + '>';
+    }
+
+    html += '<tr>' +
+      '<td><strong>' + escapeHtml(param) + '</strong></td>' +
+      '<td><input type="text" class="config-input" data-param="' + escapeHtml(param) + '" value="' +
+      escapeHtml(valor) + '"' +
+      (param === 'logo_url' ? ' onblur="previewLogoConfig(this)"' : '') +
+      '></td>' +
+      '<td class="config-desc">' + escapeHtml(desc) + '</td>' +
+      '<td>' + previewHtml + '</td>' +
+      '</tr>';
+  }
+
+  tbody.innerHTML = html;
+}
+
+// Escape HTML para evitar inyección
+function escapeHtml(text) {
+  if (!text) return '';
+  var div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// Preview automático del logo al cambiar la URL
+function previewLogoConfig(input) {
+  var param = input.getAttribute('data-param');
+  var preview = document.getElementById('config-preview-' + param);
+  if (preview) {
+    preview.src = input.value;
+    preview.style.display = input.value ? 'block' : 'none';
+  }
+}
+
+// Guardar todos los cambios de configuración
+function guardarConfiguracion() {
+  var inputs = document.querySelectorAll('.config-input');
+  var cambios = [];
+
+  for (var i = 0; i < inputs.length; i++) {
+    var param = inputs[i].getAttribute('data-param');
+    var valor = inputs[i].value;
+    if (window.appConfig[param] !== valor) {
+      cambios.push({ parametro: param, valor: valor });
+    }
+  }
+
+  if (cambios.length === 0) {
+    mostrarMensajeConfig('No hay cambios para guardar', 'info');
+    return;
+  }
+
+  var btn = document.getElementById('btn-guardar-config');
+  btn.disabled = true;
+  btn.textContent = 'Guardando...';
+
+  var completados = 0;
+  var errores = 0;
+
+  for (var j = 0; j < cambios.length; j++) {
+    (function(cambio) {
+      google.script.run
+        .withSuccessHandler(function(resultado) {
+          completados++;
+          if (!resultado.ok) errores++;
+          // Actualizar la variable global
+          window.appConfig[cambio.parametro] = cambio.valor;
+          verificarFinGuardadoConfig(completados, cambios.length, errores, btn);
+        })
+        .withFailureHandler(function() {
+          completados++;
+          errores++;
+          verificarFinGuardadoConfig(completados, cambios.length, errores, btn);
+        })
+        .actualizarConfiguracion(cambio.parametro, cambio.valor);
+    })(cambios[j]);
+  }
+}
+
+// Verificar si todos los cambios terminaron de guardar
+function verificarFinGuardadoConfig(completados, total, errores, btn) {
+  if (completados < total) return;
+
+  btn.disabled = false;
+  btn.innerHTML = '<span class="material-icons" style="font-size:16px; vertical-align:middle;">save</span> Guardar cambios';
+
+  if (errores > 0) {
+    mostrarMensajeConfig('Se guardaron con ' + errores + ' error(es)', 'error');
+  } else {
+    mostrarMensajeConfig('Configuración guardada correctamente', 'exito');
+    // Re-renderizar logo y nombre en sidebar/navbar sin recargar
+    aplicarConfigDashboard();
+  }
+}
+
+// Mostrar mensaje de resultado en la pantalla de configuración
+function mostrarMensajeConfig(mensaje, tipo) {
+  var msgEl = document.getElementById('config-mensaje');
+  msgEl.textContent = mensaje;
+  msgEl.className = 'config-mensaje ' + tipo;
+  msgEl.style.display = 'inline-block';
+  setTimeout(function() { msgEl.style.display = 'none'; }, 4000);
 }
 
 // ==================== UTILIDADES ====================
