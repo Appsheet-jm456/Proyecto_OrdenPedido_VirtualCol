@@ -146,6 +146,8 @@
               <tr><td colspan="8" class="sin-datos">Cargando órdenes...</td></tr>
             </tbody>
           </table>
+          <!-- Cards mobile: se muestran solo en < 768px -->
+          <div id="cards-ordenes-mobile" class="cards-mobile"></div>
         </div>
       </section>
 
@@ -253,6 +255,11 @@
         </div>
       </section>
     </main>
+
+    <!-- FAB: botón flotante para Nueva Orden (visible solo en móvil) -->
+    <button class="fab-nueva-orden" onclick="abrirModalNuevaOrden()" aria-label="Nueva Orden">
+      <span class="material-icons">add</span>
+    </button>
   </div>
 
   <!-- ==================== MODAL: Nueva Orden ==================== -->

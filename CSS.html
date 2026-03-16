@@ -124,15 +124,16 @@ body {
 
 /* Sidebar */
 .sidebar {
-  width: 240px;
+  width: 160px;
   background: #fff;
   border-right: 1px solid #e8e8e8;
   display: flex;
   flex-direction: column;
-  padding: 24px 16px;
+  padding: 20px 12px;
   position: fixed;
   height: 100vh;
   overflow-y: auto;
+  z-index: 200;
 }
 
 .sidebar-header h2 {
@@ -235,7 +236,7 @@ body {
 
 /* Contenido principal */
 .contenido-principal {
-  margin-left: 240px;
+  margin-left: 160px;
   flex: 1;
   padding: 0;
 }
@@ -878,55 +879,474 @@ body {
   display: none;
 }
 
-/* ==================== RESPONSIVE ==================== */
-@media (max-width: 768px) {
+/* ==================== CARDS MOBILE (ocultas por defecto) ==================== */
+.cards-mobile {
+  display: none;
+}
+
+.card-orden-mobile {
+  background: #fff;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+
+.card-orden-mobile-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.card-orden-mobile-header strong {
+  font-size: 14px;
+  color: #1a1a1a;
+}
+
+.card-orden-mobile-body {
+  font-size: 13px;
+  color: #555;
+  line-height: 1.6;
+}
+
+.card-orden-mobile-body .linea-card {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+}
+
+.card-orden-mobile-body .linea-card .etiqueta {
+  color: #888;
+  font-size: 12px;
+}
+
+.card-orden-mobile-footer {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* FAB — botón flotante (oculto por defecto) */
+.fab-nueva-orden {
+  display: none;
+}
+
+/* Toggle sidebar móvil (oculto por defecto) */
+.btn-toggle-sidebar {
+  display: none;
+}
+
+/* ==================== RESPONSIVE: TABLET (768px - 1023px) ==================== */
+@media (min-width: 768px) and (max-width: 1023px) {
+  /* Sidebar reducida a 120px, solo iconos + número */
   .sidebar {
-    width: 100%;
-    height: auto;
-    position: relative;
-    flex-direction: row;
-    flex-wrap: wrap;
-    padding: 12px;
+    width: 120px;
+    padding: 16px 8px;
+    align-items: center;
   }
 
-  .sidebar-cards {
-    flex-direction: row;
-    flex-wrap: wrap;
+  .sidebar-header h2 {
+    font-size: 12px;
+    text-align: center;
+  }
+
+  .sidebar-header p {
+    font-size: 10px;
+    text-align: center;
   }
 
   .card-estado {
-    flex: 1;
-    min-width: 80px;
-    padding: 10px 8px;
+    padding: 10px 6px;
   }
 
   .card-numero {
-    font-size: 20px;
+    font-size: 22px;
+  }
+
+  .card-label {
+    font-size: 9px;
+    line-height: 1.2;
   }
 
   .contenido-principal {
-    margin-left: 0;
+    margin-left: 120px;
   }
 
-  .modal-contenido, .modal-grande {
-    width: 95%;
-    margin: 10px;
+  /* Navbar tabs: scroll horizontal */
+  .navbar-tabs {
+    padding: 10px 16px;
+    overflow-x: auto;
+    gap: 8px;
+  }
+
+  .tabs {
+    flex-shrink: 0;
+  }
+
+  .tab {
+    padding: 8px 12px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .btn-nueva-orden {
+    padding: 8px 14px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  /* Tabla: ocultar columna Hora */
+  .tabla-principal thead th:nth-child(6),
+  .tabla-principal tbody td:nth-child(6) {
+    display: none;
+  }
+
+  /* Filtros: grid 2x2 */
+  .filtros-ordenes-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
   }
 
   .filtros-grid {
     grid-template-columns: 1fr 1fr;
   }
 
-  .filtros-ordenes-grid {
-    grid-template-columns: 1fr 1fr;
+  /* Modales: 90% del ancho */
+  .modal-contenido, .modal-grande {
+    width: 90%;
   }
 
+  /* Form grid: mantener 2 columnas */
+  .form-grid-items {
+    grid-template-columns: 2fr 1fr 1fr auto;
+  }
+
+  .seccion-tab {
+    padding: 16px;
+  }
+
+  .datos-orden-grid {
+    grid-template-columns: 1fr 1fr;
+    font-size: 12px;
+  }
+
+  .input-busqueda {
+    width: 200px;
+  }
+
+  .btn-cerrar-sesion {
+    font-size: 11px;
+    padding: 6px 8px;
+  }
+
+  .usuario-info {
+    font-size: 10px;
+  }
+}
+
+/* ==================== RESPONSIVE: MÓVIL (< 768px) ==================== */
+@media (max-width: 767px) {
+  /* Sidebar: barra inferior fija tipo bottom navigation */
+  .sidebar {
+    width: 100%;
+    height: 64px;
+    position: fixed;
+    bottom: 0;
+    top: auto;
+    left: 0;
+    flex-direction: row;
+    padding: 4px 8px;
+    border-right: none;
+    border-top: 1px solid #e0e0e0;
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.08);
+    z-index: 300;
+    overflow: visible;
+    align-items: center;
+    justify-content: space-around;
+  }
+
+  .sidebar-header {
+    display: none;
+  }
+
+  .sidebar-cards {
+    flex-direction: row;
+    flex: 1;
+    justify-content: space-around;
+    align-items: center;
+    gap: 0;
+  }
+
+  .card-estado {
+    flex: 1;
+    padding: 6px 2px;
+    border-radius: 8px;
+    min-width: 0;
+  }
+
+  .card-numero {
+    font-size: 18px;
+  }
+
+  .card-label {
+    font-size: 8px;
+    line-height: 1.1;
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sidebar-footer {
+    display: none;
+  }
+
+  /* Contenido principal sin margen lateral, con espacio inferior para la barra */
+  .contenido-principal {
+    margin-left: 0;
+    padding-bottom: 74px;
+  }
+
+  /* Navbar tabs */
+  .navbar-tabs {
+    padding: 8px 12px;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .tabs {
+    display: flex;
+    overflow-x: auto;
+    width: 100%;
+    gap: 2px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .tab {
+    padding: 8px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+
+  /* Ocultar botón normal de Nueva Orden en navbar */
+  .btn-nueva-orden {
+    display: none;
+  }
+
+  /* FAB: botón flotante circular fijo */
+  .fab-nueva-orden {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    bottom: 80px;
+    right: 16px;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: #ffcf22;
+    color: #1a1a1a;
+    border: none;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    font-size: 28px;
+    cursor: pointer;
+    z-index: 250;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+
+  .fab-nueva-orden:hover,
+  .fab-nueva-orden:active {
+    transform: scale(1.08);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+  }
+
+  .fab-nueva-orden .material-icons {
+    font-size: 28px;
+  }
+
+  /* Tablas: ocultar en móvil, mostrar cards */
+  #tabla-ordenes-container .tabla-principal {
+    display: none;
+  }
+
+  .cards-mobile {
+    display: block;
+  }
+
+  /* Tabla clientes y usuarios: hacer scroll horizontal */
+  #seccion-clientes .tabla-principal,
+  #seccion-usuarios .tabla-principal {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .seccion-tab {
+    padding: 12px;
+  }
+
+  /* Filtros: apilados verticalmente */
+  .filtros-ordenes-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .filtros-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .campo-filtro input,
+  .campo-filtro select {
+    min-height: 44px;
+    font-size: 14px;
+  }
+
+  .btn-limpiar-filtros {
+    width: 100%;
+    justify-content: center;
+    min-height: 44px;
+  }
+
+  /* Modales: pantalla completa */
+  .modal-overlay {
+    align-items: stretch;
+  }
+
+  .modal-contenido, .modal-grande {
+    width: 100%;
+    max-height: 100vh;
+    height: 100%;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .modal-header {
+    padding: 14px 16px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    background: #fff;
+    z-index: 10;
+  }
+
+  .modal-header h3 {
+    font-size: 16px;
+  }
+
+  .modal-body {
+    padding: 16px;
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  .modal-footer {
+    padding: 12px 16px;
+    flex-shrink: 0;
+    position: sticky;
+    bottom: 0;
+    background: #fff;
+    z-index: 10;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .modal-footer button {
+    flex: 1;
+    min-height: 44px;
+    font-size: 14px;
+  }
+
+  /* Form grids: una columna en móvil */
   .form-grid {
     grid-template-columns: 1fr;
   }
 
   .form-grid-items {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .form-grid-items input {
+    min-height: 44px;
+  }
+
+  .btn-agregar-item {
+    justify-content: center;
+    min-height: 44px;
+    background: #f5f5f5;
+    border-radius: 8px;
+  }
+
+  .form-cliente-inline-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Datos de orden en modal ver: una columna */
+  .datos-orden-grid {
+    grid-template-columns: 1fr;
+    font-size: 13px;
+  }
+
+  /* Botones de estado: ancho completo */
+  .botones-transicion {
+    flex-direction: column;
+  }
+
+  .btn-estado {
+    width: 100%;
+    min-height: 44px;
+    text-align: center;
+    font-size: 14px;
+  }
+
+  /* Login */
+  .login-card {
+    width: 90%;
+    max-width: 380px;
+    padding: 24px;
+  }
+
+  /* Campos touch-friendly: mínimo 44px */
+  .campo-form input,
+  .campo-form select,
+  .campo-form textarea {
+    min-height: 44px;
+    font-size: 14px;
+  }
+
+  .btn-principal,
+  .btn-secundario {
+    min-height: 44px;
+    font-size: 15px;
+  }
+
+  .btn-accion {
+    min-height: 44px;
+    padding: 10px 16px;
+  }
+
+  /* Sección header */
+  .seccion-header {
+    flex-direction: column;
+    gap: 10px;
+    align-items: stretch;
+  }
+
+  .input-busqueda {
+    width: 100%;
+  }
+
+  /* Reportes */
+  .reportes-filtros .btn-nueva-orden {
+    display: flex;
+    width: 100%;
+    justify-content: center;
+    min-height: 44px;
   }
 }
 </style>

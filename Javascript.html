@@ -244,10 +244,13 @@ function renderizarOrdenes() {
 
     if (ordenes.length === 0) {
       tbody.innerHTML = '<tr><td colspan="8" class="sin-datos">No hay órdenes con estos filtros</td></tr>';
+      var cardsMobileVacio = document.getElementById('cards-ordenes-mobile');
+      if (cardsMobileVacio) cardsMobileVacio.innerHTML = '<p style="text-align:center;color:#aaa;padding:40px;">No hay órdenes con estos filtros</p>';
       return;
     }
 
     var html = '';
+    var htmlCards = '';
     for (var i = 0; i < ordenes.length; i++) {
       var o = ordenes[i];
       var badgeClass = obtenerClaseBadge(o.estado);
@@ -273,6 +276,7 @@ function renderizarOrdenes() {
         vendedorHtml += '<br><small style="color:#888;">Recibe:</small> <strong>' + o.nombre_receptor + '</strong>';
       }
 
+      // Fila de tabla (desktop/tablet)
       html += '<tr>' +
         '<td><strong>' + (o.numero_op || '—') + '</strong></td>' +
         '<td>' + fechaHtml + '</td>' +
@@ -284,9 +288,37 @@ function renderizarOrdenes() {
         '<td><button class="btn-accion" onclick="verOrden(' + o.id_op + ')">' +
         '<span class="material-icons">visibility</span> Ver</button></td>' +
         '</tr>';
+
+      // Card mobile
+      var receptorCard = o.nombre_receptor ? '<div class="linea-card"><span class="etiqueta">Recibe</span><strong>' + o.nombre_receptor + '</strong></div>' : '';
+      var limiteCard = '';
+      if (o.estado === 'Prestado' && o.fecha_limite_devolucion) {
+        limiteCard = '<div class="linea-card"><span class="etiqueta">Límite</span><span class="texto-rojo">' + String(o.fecha_limite_devolucion).substring(0, 10) + '</span></div>';
+      }
+
+      htmlCards += '<div class="card-orden-mobile">' +
+        '<div class="card-orden-mobile-header">' +
+          '<strong>' + (o.numero_op || '—') + '</strong>' +
+          '<span class="badge ' + badgeClass + '">' + (o.estado || '—') + '</span>' +
+        '</div>' +
+        '<div class="card-orden-mobile-body">' +
+          '<div class="linea-card"><span class="etiqueta">Fecha</span><span>' + fechaCorta + '</span></div>' +
+          '<div class="linea-card"><span class="etiqueta">Cliente</span><span>' + (o.nombre_cliente || '—') + '</span></div>' +
+          '<div class="linea-card"><span class="etiqueta">Vendedor</span><span>' + (o.nombre_vendedor || '—') + '</span></div>' +
+          receptorCard +
+          limiteCard +
+        '</div>' +
+        '<div class="card-orden-mobile-footer">' +
+          '<button class="btn-accion" onclick="verOrden(' + o.id_op + ')">' +
+          '<span class="material-icons">visibility</span> Ver</button>' +
+        '</div>' +
+      '</div>';
     }
 
     tbody.innerHTML = html;
+    // Renderizar cards mobile
+    var cardsMobile = document.getElementById('cards-ordenes-mobile');
+    if (cardsMobile) cardsMobile.innerHTML = htmlCards;
     console.log('[renderizarOrdenes] Tabla renderizada con ' + ordenes.length + ' filas');
 
   } catch (e) {

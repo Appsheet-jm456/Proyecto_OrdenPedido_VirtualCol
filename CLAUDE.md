@@ -287,75 +287,52 @@ function generarReporteExcel(filtros) {
   // 5. Retornar URL de descarga temporal
 }
 ```
- 
-## Responsive Design — Breakpoints
+
+## Diseño Responsive — 3 Breakpoints
 La app debe funcionar correctamente en Desktop, Tablet y Celular.
 El celular es herramienta de uso frecuente en el local.
- 
+
 ### Breakpoints definidos
 - Desktop: ≥ 1024px
 - Tablet: 768px – 1023px
 - Celular: < 768px (prioridad alta)
- 
-### Sidebar (columna izquierda)
-- Desktop: sidebar fijo 160px, texto + número visibles
-- Tablet: sidebar fijo 120px, solo ícono de color + número (sin texto)
-- Celular: barra horizontal fija en la parte INFERIOR (bottom nav),
-  5 estados en fila, height 64px, fondo blanco, sombra superior,
-  solo badge de color + número, sin texto
- 
-### Navbar / Tabs superiores
-- Desktop/Tablet: tabs horizontales normales
-- Celular: tabs con scroll horizontal (overflow-x: auto), font-size 13px
- 
-### Botón "+ Nueva Orden"
-- Desktop/Tablet: botón completo con texto, arriba a la derecha
-- Celular: botón flotante circular FAB fijo abajo a la derecha,
-  solo ícono "+", 56x56px, border-radius 50%, color #ffcf22, z-index alto
- 
-### Tabla principal de órdenes
-- Desktop: todas las columnas visibles
-- Tablet: ocultar columna "Hora"
-- Celular: cada fila se convierte en card apilada verticalmente:
-  * Línea 1: N° OP (negrita) + badge Estado (derecha)
-  * Línea 2: nombre del Cliente
-  * Línea 3: Fecha | Valor total
-  * Línea 4: Vendedor | Recibe: [nombre_receptor]
-  * Botón "Ver / Gestionar" ancho completo al fondo, color #ffcf22
- 
-### Modales
-- Desktop: centrado, max-width 700px
-- Tablet: centrado, width 90%
-- Celular: pantalla completa (width 100%, height 100%, top 0, border-radius 0),
-  scroll interno, botón "Cerrar" fijo arriba a la derecha,
-  botones de acción (Guardar, Imprimir) fijos en la parte inferior del modal
- 
-### Filtros de tabla
-- Desktop: filtros en fila horizontal
-- Tablet: grid 2 columnas
-- Celular: apilados verticalmente, cada input ancho 100%, botón "Limpiar" ancho completo
- 
-### Formulario Nueva Orden
-- Desktop/Tablet: campos en dos columnas donde aplique
-- Celular: todos los campos apilados, ancho 100%,
-  inputs cantidad y valor unitario en fila 50/50,
-  botón "Guardar Orden" fijo al fondo del modal
- 
-### Tablas de Clientes y Usuarios
-- Celular: convertir a cards con campos principales y botón editar al fondo
- 
-### Estándares touch (mobile)
-- Todos los botones y elementos clickeables: min-height 44px, min-width 44px
-- -webkit-tap-highlight-color: transparent en botones
-- Font-size base en mobile: 14px
-- Padding de celdas reducido a 8px en mobile
-- Sin overflow-x horizontal en body
- 
-### Implementación
-- Solo media queries en Estilos.html, sin Bootstrap ni frameworks CSS externos
-- Comentarios en español indicando cada breakpoint
-- El scroll de tablas y modales debe funcionar correctamente en mobile
- 
+
+### Desktop (≥ 1024px)
+- Sidebar fijo izquierdo de 160px con cards de estado apiladas verticalmente
+- Contenido principal con margin-left: 160px
+- Tabla completa con todas las columnas visibles
+- Modales centrados (500px / 700px para modal-grande)
+- Filtros en fila horizontal
+
+### Tablet (768px - 1023px)
+- Sidebar reducido a 120px, cards con número + etiqueta pequeña
+- Columna "Hora" oculta en la tabla de órdenes
+- Filtros en grid 2x2
+- Modales al 90% del ancho
+- Navbar tabs con scroll horizontal
+
+### Móvil (< 768px)
+- Sidebar se convierte en barra inferior fija (bottom nav bar) de 64px
+  con los 5 estados como iconos + número en fila horizontal
+- Header y footer del sidebar ocultos
+- Contenido principal con padding-bottom: 74px para no quedar detrás de la barra
+- Botón "Nueva Orden" del navbar se oculta; aparece un FAB circular (56x56px)
+  fijo en esquina inferior derecha con icono "+" en #ffcf22
+- Tabla de órdenes oculta; se muestran cards apiladas verticalmente
+  (contenedor: #cards-ordenes-mobile, clase: .cards-mobile)
+- Cada card muestra: N° OP + badge estado (header), fecha, cliente, vendedor,
+  receptor (si existe), límite (si prestado), botón "Ver"
+- Modales a pantalla completa (100% width/height, border-radius: 0)
+  con header/footer sticky y body con scroll
+- Filtros apilados en una columna
+- Forms en una columna
+- Todos los inputs/botones con min-height: 44px (touch-friendly)
+- Tablas de clientes/usuarios con scroll horizontal
+
+### Archivos afectados
+- CSS.html: media queries para tablet y móvil, estilos de .cards-mobile y .fab-nueva-orden
+- Index.html: div#cards-ordenes-mobile junto a la tabla, botón.fab-nueva-orden en dashboard
+- Javascript.html: renderizarOrdenes() genera tanto filas <tr> como cards mobile
 ## Comandos frecuentes
 - Abrir Claude Code en este proyecto: cd Proyecto_OrdenPedido_VirtualCol && claude
 - Ejecutar tarea específica: claude -p "agrega validación de campos vacíos en el formulario de nueva orden"
