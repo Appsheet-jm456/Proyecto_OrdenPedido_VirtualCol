@@ -69,7 +69,8 @@ function crearTablas() {
       'fecha_prestamo',
       'fecha_limite_devolucion',
       'dias_habiles_prestamo',
-      'alerta_vencimiento'
+      'alerta_vencimiento',
+      'nombre_receptor'
     ],
     'Detalle_Pedido': [
       'id_detalle',
@@ -252,6 +253,38 @@ function resetearAdmin() {
 
   Logger.log('=== Listo. Ingresa con: appsheetjm@gmail.com / admin123 ===');
   return 'Admin reseteado. Email: appsheetjm@gmail.com / Pass: admin123';
+}
+
+// ============================================================
+// Migración: agregar columna nombre_receptor a Orden_Pedido
+// Ejecutar UNA VEZ si la hoja ya existe sin esa columna
+// ============================================================
+function agregarColumnaNombreReceptor() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var hoja = ss.getSheetByName('Orden_Pedido');
+  if (!hoja) {
+    Logger.log('Hoja Orden_Pedido no existe');
+    return;
+  }
+
+  var encabezados = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0];
+  // Verificar si la columna ya existe
+  if (encabezados.indexOf('nombre_receptor') !== -1) {
+    Logger.log('Columna nombre_receptor ya existe');
+    return 'La columna ya existe';
+  }
+
+  // Agregar encabezado en la siguiente columna
+  var nuevaCol = encabezados.length + 1;
+  var celda = hoja.getRange(1, nuevaCol);
+  celda.setValue('nombre_receptor');
+  celda.setBackground('#ffcf22');
+  celda.setFontWeight('bold');
+  celda.setHorizontalAlignment('center');
+  celda.setFontColor('#1a1a1a');
+
+  Logger.log('Columna nombre_receptor agregada en posición ' + nuevaCol);
+  return 'Columna nombre_receptor agregada exitosamente';
 }
 
 // ============================================================
@@ -465,7 +498,8 @@ function crearOrden(datosOrden, detalleItems) {
     '',                           // fecha_prestamo
     '',                           // fecha_limite_devolucion
     1,                            // dias_habiles_prestamo (por defecto 1)
-    ''                            // alerta_vencimiento
+    '',                           // alerta_vencimiento
+    datosOrden.nombre_receptor || '' // nombre_receptor (quien recibe el equipo)
   ];
 
   hojaOP.appendRow(filaOrden);
@@ -619,7 +653,7 @@ function obtenerDetalleOrden(idOp) {
 // ============================================================
 // ACTUALIZAR ESTADO DE ORDEN
 // ============================================================
-function actualizarEstadoOrden(idOp, nuevoEstado, observaciones) {
+function actualizarEstadoOrden(idOp, nuevoEstado, observaciones, nombreReceptor) {
   var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   var hojaOP = ss.getSheetByName('Orden_Pedido');
   var hojaDetalle = ss.getSheetByName('Detalle_Pedido');
@@ -636,12 +670,17 @@ function actualizarEstadoOrden(idOp, nuevoEstado, observaciones) {
       // Actualizar estado (columna 7)
       hojaOP.getRange(fila, 7).setValue(nuevoEstado);
 
-      // Si cambia a Prestado: registrar fecha_prestamo y fecha_limite
+      // Si cambia a Prestado: registrar fecha_prestamo, fecha_limite y nombre_receptor
       if (nuevoEstado === ESTADOS.PRESTADO) {
         hojaOP.getRange(fila, 10).setValue(fechaHora); // fecha_prestamo
         var fechaLimite = calcularFechaLimite(ahora, 1); // 1 día hábil
         var fechaLimiteStr = Utilities.formatDate(fechaLimite, 'America/Bogota', 'yyyy-MM-dd HH:mm:ss');
         hojaOP.getRange(fila, 11).setValue(fechaLimiteStr); // fecha_limite_devolucion
+
+        // Guardar nombre de quien recibe el equipo (columna 14)
+        if (nombreReceptor) {
+          hojaOP.getRange(fila, 14).setValue(nombreReceptor);
+        }
 
         // Actualizar hora_entrega en detalle
         var datosDetalle = hojaDetalle.getDataRange().getValues();

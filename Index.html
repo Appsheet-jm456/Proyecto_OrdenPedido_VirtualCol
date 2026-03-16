@@ -89,6 +89,45 @@
 
       <!-- Tab: Órdenes -->
       <section id="seccion-ordenes" class="seccion-tab">
+        <!-- Barra de filtros dinámicos -->
+        <div class="filtros-ordenes">
+          <div class="filtros-ordenes-grid">
+            <div class="campo-filtro">
+              <label>N° OP</label>
+              <input type="text" id="filtro-op-numero" placeholder="Ej: OP-2025" oninput="aplicarFiltrosOrdenes()">
+            </div>
+            <div class="campo-filtro">
+              <label>Cliente / Local</label>
+              <input type="text" id="filtro-op-cliente" placeholder="Buscar cliente..." oninput="aplicarFiltrosOrdenes()">
+            </div>
+            <div class="campo-filtro">
+              <label>Estado</label>
+              <select id="filtro-op-estado" onchange="aplicarFiltrosOrdenes()">
+                <option value="">Todos</option>
+                <option value="Pendiente">Pendiente</option>
+                <option value="Prestado">Prestado</option>
+                <option value="Por Cobrar/Devolver">Por Cobrar/Devolver</option>
+                <option value="Facturado">Facturado</option>
+                <option value="Regresado">Regresado</option>
+              </select>
+            </div>
+            <div class="campo-filtro">
+              <label>Fecha desde</label>
+              <input type="date" id="filtro-op-fecha-desde" onchange="aplicarFiltrosOrdenes()">
+            </div>
+            <div class="campo-filtro">
+              <label>Fecha hasta</label>
+              <input type="date" id="filtro-op-fecha-hasta" onchange="aplicarFiltrosOrdenes()">
+            </div>
+            <div class="campo-filtro campo-filtro-btn">
+              <button class="btn-limpiar-filtros" onclick="limpiarFiltrosOrdenes()">
+                <span class="material-icons" style="font-size:16px;">filter_alt_off</span> Limpiar
+              </button>
+            </div>
+          </div>
+          <p id="conteo-ordenes" class="conteo-ordenes"></p>
+        </div>
+
         <div id="tabla-ordenes-container">
           <table class="tabla-principal" id="tabla-ordenes">
             <thead>
@@ -96,7 +135,7 @@
                 <th>N° OP</th>
                 <th>Fecha</th>
                 <th>Cliente</th>
-                <th>Vendedor</th>
+                <th>Vendedor / Receptor</th>
                 <th>Valor</th>
                 <th>Hora</th>
                 <th>Estado</th>
@@ -301,9 +340,15 @@
           </tfoot>
         </table>
 
-        <div class="campo-form">
-          <label>Observaciones</label>
-          <textarea id="nueva-orden-observaciones" rows="2" placeholder="Observaciones opcionales..."></textarea>
+        <div class="form-grid">
+          <div class="campo-form">
+            <label>Entregado a / Recibe</label>
+            <input type="text" id="nueva-orden-receptor" placeholder="Nombre de quien recibe el equipo (opcional)">
+          </div>
+          <div class="campo-form">
+            <label>Observaciones</label>
+            <textarea id="nueva-orden-observaciones" rows="2" placeholder="Observaciones opcionales..."></textarea>
+          </div>
         </div>
       </div>
       <div class="modal-footer">
@@ -330,6 +375,7 @@
           <div><strong>Cliente:</strong> <span id="ver-cliente"></span></div>
           <div><strong>Vendedor:</strong> <span id="ver-vendedor"></span></div>
           <div><strong>Local origen:</strong> <span id="ver-local"></span></div>
+          <div><strong>Recibe equipo:</strong> <span id="ver-receptor"></span></div>
         </div>
 
         <table class="tabla-principal tabla-detalle-orden">
@@ -363,6 +409,12 @@
           <div class="estado-actual-container">
             <span>Estado actual:</span>
             <span id="ver-estado-badge" class="badge"></span>
+          </div>
+          <!-- Campo receptor: visible solo al marcar como Prestado -->
+          <div id="campo-receptor-prestado" class="campo-form" style="display:none;">
+            <label>Nombre de quien recibe el equipo *</label>
+            <input type="text" id="ver-nombre-receptor" placeholder="Nombre completo de quien recibe">
+            <small style="color:#888;">Obligatorio para marcar como Prestado</small>
           </div>
           <div id="botones-transicion" class="botones-transicion"></div>
           <div class="campo-form">

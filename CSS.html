@@ -633,6 +633,83 @@ body {
   margin-bottom: 12px;
 }
 
+/* ==================== BARRA DE FILTROS ÓRDENES ==================== */
+.filtros-ordenes {
+  background: #fff;
+  padding: 16px 20px;
+  border-radius: 10px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+
+.filtros-ordenes-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr 1fr 1fr 1fr auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.campo-filtro label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #888;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.campo-filtro input,
+.campo-filtro select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: 'Inter', sans-serif;
+  transition: border-color 0.2s;
+}
+
+.campo-filtro input:focus,
+.campo-filtro select:focus {
+  outline: none;
+  border-color: #ffcf22;
+  box-shadow: 0 0 0 3px rgba(255,207,34,0.15);
+}
+
+.campo-filtro-btn {
+  display: flex;
+  align-items: flex-end;
+}
+
+.btn-limpiar-filtros {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 14px;
+  background: #ffcf22;
+  color: #1a1a1a;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-family: 'Inter', sans-serif;
+  white-space: nowrap;
+}
+
+.btn-limpiar-filtros:hover {
+  background: #f0c000;
+}
+
+.conteo-ordenes {
+  font-size: 12px;
+  color: #888;
+  margin-top: 10px;
+  font-weight: 500;
+}
+
 /* ==================== FORMULARIO INLINE NUEVO CLIENTE ==================== */
 .enlace-nuevo-cliente {
   display: inline-flex;
@@ -837,6 +914,10 @@ body {
   }
 
   .filtros-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .filtros-ordenes-grid {
     grid-template-columns: 1fr 1fr;
   }
 

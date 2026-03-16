@@ -127,7 +127,82 @@ function filtrarPorEstado(estado) {
   } else {
     filtroEstadoActual = estado;
   }
+  // Sincronizar con el dropdown de filtros si existe
+  var selectEstado = document.getElementById('filtro-op-estado');
+  if (selectEstado) {
+    selectEstado.value = filtroEstadoActual || '';
+  }
   renderizarOrdenes();
+}
+
+// ==================== FILTROS DINÁMICOS DE ÓRDENES ====================
+
+// Aplicar todos los filtros combinados (AND) sobre el cache de órdenes
+function aplicarFiltrosOrdenes() {
+  // Sincronizar el filtro de estado del sidebar con el dropdown
+  var estadoDropdown = document.getElementById('filtro-op-estado').value;
+  filtroEstadoActual = estadoDropdown || null;
+  renderizarOrdenes();
+}
+
+// Limpiar todos los filtros y mostrar todas las órdenes
+function limpiarFiltrosOrdenes() {
+  document.getElementById('filtro-op-numero').value = '';
+  document.getElementById('filtro-op-cliente').value = '';
+  document.getElementById('filtro-op-estado').value = '';
+  document.getElementById('filtro-op-fecha-desde').value = '';
+  document.getElementById('filtro-op-fecha-hasta').value = '';
+  filtroEstadoActual = null;
+  renderizarOrdenes();
+}
+
+// Obtener órdenes filtradas según todos los criterios activos
+function obtenerOrdenesFiltradas() {
+  var ordenes = ordenesCache;
+  var totalSinFiltro = ordenes.length;
+
+  // Filtro por N° OP (búsqueda parcial)
+  var filtroNumero = (document.getElementById('filtro-op-numero').value || '').trim().toLowerCase();
+  if (filtroNumero) {
+    ordenes = ordenes.filter(function(o) {
+      return String(o.numero_op || '').toLowerCase().indexOf(filtroNumero) !== -1;
+    });
+  }
+
+  // Filtro por cliente (búsqueda parcial)
+  var filtroCliente = (document.getElementById('filtro-op-cliente').value || '').trim().toLowerCase();
+  if (filtroCliente) {
+    ordenes = ordenes.filter(function(o) {
+      return String(o.nombre_cliente || '').toLowerCase().indexOf(filtroCliente) !== -1;
+    });
+  }
+
+  // Filtro por estado (del dropdown o del sidebar)
+  if (filtroEstadoActual) {
+    ordenes = ordenes.filter(function(o) {
+      return o.estado === filtroEstadoActual;
+    });
+  }
+
+  // Filtro por fecha desde
+  var fechaDesde = document.getElementById('filtro-op-fecha-desde').value;
+  if (fechaDesde) {
+    ordenes = ordenes.filter(function(o) {
+      var fechaOrden = String(o.fecha || '').substring(0, 10);
+      return fechaOrden >= fechaDesde;
+    });
+  }
+
+  // Filtro por fecha hasta
+  var fechaHasta = document.getElementById('filtro-op-fecha-hasta').value;
+  if (fechaHasta) {
+    ordenes = ordenes.filter(function(o) {
+      var fechaOrden = String(o.fecha || '').substring(0, 10);
+      return fechaOrden <= fechaHasta;
+    });
+  }
+
+  return { ordenes: ordenes, total: totalSinFiltro };
 }
 
 // ==================== ÓRDENES ====================
@@ -151,19 +226,24 @@ function renderizarOrdenes() {
   var tbody = document.getElementById('tbody-ordenes');
 
   try {
-    var ordenes = ordenesCache;
-    console.log('[renderizarOrdenes] Total en cache:', ordenes.length, '| Filtro activo:', filtroEstadoActual || 'ninguno');
+    // Obtener órdenes filtradas con todos los criterios combinados
+    var resultado = obtenerOrdenesFiltradas();
+    var ordenes = resultado.ordenes;
+    var total = resultado.total;
+    console.log('[renderizarOrdenes] Mostrando', ordenes.length, 'de', total);
 
-    // Aplicar filtro de estado si existe
-    if (filtroEstadoActual) {
-      ordenes = ordenes.filter(function(o) {
-        return o.estado === filtroEstadoActual;
-      });
+    // Actualizar contador
+    var conteo = document.getElementById('conteo-ordenes');
+    if (conteo) {
+      if (ordenes.length === total) {
+        conteo.textContent = 'Mostrando ' + total + ' órdenes';
+      } else {
+        conteo.textContent = 'Mostrando ' + ordenes.length + ' de ' + total + ' órdenes';
+      }
     }
 
     if (ordenes.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="8" class="sin-datos">No hay órdenes' +
-        (filtroEstadoActual ? ' con estado "' + filtroEstadoActual + '"' : '') + '</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" class="sin-datos">No hay órdenes con estos filtros</td></tr>';
       return;
     }
 
@@ -183,16 +263,21 @@ function renderizarOrdenes() {
 
       // Extraer solo la hora (HH:mm:ss) de forma segura
       var horaStr = String(o.hora_creacion || '');
-      // Si viene como "yyyy-MM-dd HH:mm:ss", extraer solo la hora
       if (horaStr.length > 10 && horaStr.indexOf(' ') !== -1) {
         horaStr = horaStr.split(' ')[1] || horaStr;
+      }
+
+      // Columna vendedor + receptor
+      var vendedorHtml = '<small style="color:#888;">Vendedor:</small> ' + (o.nombre_vendedor || '—');
+      if (o.nombre_receptor) {
+        vendedorHtml += '<br><small style="color:#888;">Recibe:</small> <strong>' + o.nombre_receptor + '</strong>';
       }
 
       html += '<tr>' +
         '<td><strong>' + (o.numero_op || '—') + '</strong></td>' +
         '<td>' + fechaHtml + '</td>' +
         '<td>' + (o.nombre_cliente || '—') + '</td>' +
-        '<td>' + (o.nombre_vendedor || '—') + '</td>' +
+        '<td>' + vendedorHtml + '</td>' +
         '<td>$' + formatearNumero(0) + '</td>' +
         '<td>' + horaStr + '</td>' +
         '<td><span class="badge ' + badgeClass + '">' + (o.estado || '—') + '</span></td>' +
@@ -248,7 +333,12 @@ function verOrden(idOp) {
   document.getElementById('ver-cliente').textContent = orden.nombre_cliente;
   document.getElementById('ver-vendedor').textContent = orden.nombre_vendedor;
   document.getElementById('ver-local').textContent = orden.local_origen;
+  document.getElementById('ver-receptor').textContent = orden.nombre_receptor || '—';
   document.getElementById('ver-observaciones').textContent = orden.observaciones || 'Sin observaciones';
+
+  // Resetear campo de receptor para transición
+  document.getElementById('ver-nombre-receptor').value = '';
+  document.getElementById('campo-receptor-prestado').style.display = 'none';
 
   // Badge de estado
   var badgeEstado = document.getElementById('ver-estado-badge');
@@ -300,16 +390,22 @@ function renderizarDetalleOrden(detalle) {
 
 function generarBotonesTransicion(estadoActual, idOp) {
   var container = document.getElementById('botones-transicion');
+  var campoReceptor = document.getElementById('campo-receptor-prestado');
   var html = '';
 
   if (estadoActual === 'Pendiente') {
+    // Mostrar campo obligatorio de receptor antes del botón
+    campoReceptor.style.display = 'block';
     html = '<button class="btn-estado btn-estado-prestado" onclick="cambiarEstado(' + idOp + ', \'Prestado\')">Marcar como Prestado</button>';
   } else if (estadoActual === 'Prestado' || estadoActual === 'Por Cobrar/Devolver') {
+    campoReceptor.style.display = 'none';
     html = '<button class="btn-estado btn-estado-facturado" onclick="cambiarEstado(' + idOp + ', \'Facturado\')">Marcar como Facturado</button>' +
            '<button class="btn-estado btn-estado-regresado" onclick="cambiarEstado(' + idOp + ', \'Regresado\')">Marcar como Regresado</button>';
   } else if (estadoActual === 'Facturado') {
+    campoReceptor.style.display = 'none';
     html = '<button class="btn-estado btn-estado-regresado" onclick="cambiarEstado(' + idOp + ', \'Regresado\')">Marcar como Regresado</button>';
   } else if (estadoActual === 'Regresado') {
+    campoReceptor.style.display = 'none';
     html = '<p style="color:#999; font-size:13px;">Orden cerrada — no hay más transiciones disponibles.</p>';
   }
 
@@ -318,6 +414,17 @@ function generarBotonesTransicion(estadoActual, idOp) {
 
 function cambiarEstado(idOp, nuevoEstado) {
   var observaciones = document.getElementById('ver-observaciones-cambio').value.trim();
+  var nombreReceptor = '';
+
+  // Si se marca como Prestado, validar que se ingrese el nombre del receptor
+  if (nuevoEstado === 'Prestado') {
+    nombreReceptor = document.getElementById('ver-nombre-receptor').value.trim();
+    if (!nombreReceptor) {
+      alert('Debe ingresar el nombre de quien recibe el equipo');
+      document.getElementById('ver-nombre-receptor').focus();
+      return;
+    }
+  }
 
   if (!confirm('¿Cambiar estado a "' + nuevoEstado + '"?')) return;
 
@@ -335,7 +442,7 @@ function cambiarEstado(idOp, nuevoEstado) {
     .withFailureHandler(function(error) {
       alert('Error: ' + error.message);
     })
-    .actualizarEstadoOrden(idOp, nuevoEstado, observaciones);
+    .actualizarEstadoOrden(idOp, nuevoEstado, observaciones, nombreReceptor);
 }
 
 // ==================== NUEVA ORDEN ====================
@@ -344,6 +451,7 @@ function abrirModalNuevaOrden() {
   document.getElementById('nueva-orden-cliente').value = '';
   document.getElementById('nueva-orden-id-cliente').value = '';
   document.getElementById('nueva-orden-local').value = '';
+  document.getElementById('nueva-orden-receptor').value = '';
   document.getElementById('nueva-orden-observaciones').value = '';
   document.getElementById('item-descripcion').value = '';
   document.getElementById('item-cantidad').value = '1';
@@ -463,11 +571,14 @@ function guardarNuevaOrden() {
     return;
   }
 
+  var receptor = document.getElementById('nueva-orden-receptor').value.trim();
+
   var datosOrden = {
     id_cliente: parseInt(idCliente),
     id_vendedor: usuarioActual.id_usuario,
     local_origen: local,
-    observaciones: obs
+    observaciones: obs,
+    nombre_receptor: receptor
   };
 
   google.script.run
