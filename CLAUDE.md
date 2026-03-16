@@ -252,6 +252,10 @@ function generarReporteExcel(filtros) {
   // 5. Retornar URL de descarga temporal
 }
 
+
+
+
+
 ## Comandos frecuentes
 - Abrir Claude Code en este proyecto: cd Proyecto_OrdenPedido_VirtualCol && claude
 - Ejecutar tarea específica: claude -p "agrega validación de campos vacíos en el formulario de nueva orden"
