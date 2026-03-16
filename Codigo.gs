@@ -608,27 +608,46 @@ function desactivarProducto(idProducto) {
 // ============================================================
 // CRUD — ÓRDENES DE PEDIDO
 // ============================================================
+// Generar número de OP con consecutivo GLOBAL que nunca reinicia
+// Formato: OP-YYYYMMDD-NNN donde NNN es progresivo independiente del día
+// Usa LockService para evitar duplicados por concurrencia
 function generarNumeroOP() {
-  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  var hoja = ss.getSheetByName('Orden_Pedido');
-  var datos = hoja.getDataRange().getValues();
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000); // Esperar hasta 10 segundos para obtener el lock
 
-  var hoy = new Date();
-  var fechaStr = Utilities.formatDate(hoy, 'America/Bogota', 'yyyyMMdd');
-  var prefijo = 'OP-' + fechaStr + '-';
+    var props = PropertiesService.getScriptProperties();
+    var ultimoConsecutivo = props.getProperty('ultimo_consecutivo_op');
 
-  var correlativo = 0;
-  for (var i = 1; i < datos.length; i++) {
-    var numOP = datos[i][1]; // columna numero_op
-    if (typeof numOP === 'string' && numOP.indexOf(prefijo) === 0) {
-      var num = parseInt(numOP.replace(prefijo, ''), 10);
-      if (num > correlativo) correlativo = num;
+    if (ultimoConsecutivo === null) {
+      // Primera vez: inicializar con la cantidad de órdenes existentes
+      var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+      var hoja = ss.getSheetByName('Orden_Pedido');
+      var totalFilas = hoja.getLastRow() - 1; // Restar encabezado
+      ultimoConsecutivo = totalFilas > 0 ? totalFilas : 0;
+    } else {
+      ultimoConsecutivo = parseInt(ultimoConsecutivo, 10) || 0;
     }
-  }
 
-  correlativo++;
-  var numFormateado = ('000' + correlativo).slice(-3);
-  return prefijo + numFormateado;
+    // Incrementar consecutivo
+    var nuevoConsecutivo = ultimoConsecutivo + 1;
+
+    // Guardar en PropertiesService
+    props.setProperty('ultimo_consecutivo_op', String(nuevoConsecutivo));
+
+    lock.releaseLock();
+
+    // Construir número OP con fecha actual (Colombia) y consecutivo global
+    var hoy = new Date();
+    var fechaStr = Utilities.formatDate(hoy, 'America/Bogota', 'yyyyMMdd');
+    var numFormateado = ('000' + nuevoConsecutivo).slice(-3);
+    return 'OP-' + fechaStr + '-' + numFormateado;
+
+  } catch (e) {
+    // Si falla el lock, intentar liberar y lanzar error
+    try { lock.releaseLock(); } catch(ignored) {}
+    throw new Error('No se pudo generar el número de OP: ' + e.message);
+  }
 }
 
 function crearOrden(datosOrden, detalleItems) {

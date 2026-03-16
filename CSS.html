@@ -623,7 +623,7 @@ body {
 
 .filtros-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 16px;
   margin-bottom: 16px;
 }
@@ -632,6 +632,14 @@ body {
   font-size: 13px;
   color: #666;
   margin-bottom: 12px;
+}
+
+/* Botones del reporte (filtrar, limpiar, descargar) */
+.reportes-botones {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 /* ==================== BARRA DE FILTROS ÓRDENES ==================== */
@@ -1381,7 +1389,12 @@ body {
   }
 
   /* Reportes */
-  .reportes-filtros .btn-nueva-orden {
+  .reportes-botones {
+    flex-direction: column;
+  }
+
+  .reportes-botones .btn-nueva-orden,
+  .reportes-botones .btn-limpiar-filtros {
     display: flex;
     width: 100%;
     justify-content: center;

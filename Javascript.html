@@ -79,6 +79,7 @@ function mostrarDashboard() {
   cargarOrdenes();
   cargarClientes();
   cargarProductosCache();
+  cargarVendedoresReporte();
 }
 
 function cambiarTab(tab) {
@@ -1264,13 +1265,158 @@ function guardarProductoInline() {
 }
 
 // ==================== REPORTES ====================
-function descargarExcel() {
-  var filtros = {
+
+// Obtener filtros del reporte
+function obtenerFiltrosReporte() {
+  return {
     fecha_inicio: document.getElementById('filtro-fecha-inicio').value,
     fecha_fin: document.getElementById('filtro-fecha-fin').value,
-    estado: document.getElementById('filtro-estado').value,
-    id_vendedor: document.getElementById('filtro-vendedor').value
+    estado: document.getElementById('filtro-estado-reporte').value,
+    id_vendedor: document.getElementById('filtro-vendedor').value,
+    cliente: (document.getElementById('filtro-cliente-reporte').value || '').trim().toLowerCase()
   };
+}
+
+// Filtrar y previsualizar reporte
+function filtrarReporte() {
+  console.log('[filtrarReporte] Iniciando filtrado...');
+  var tbody = document.getElementById('tbody-reporte');
+  var conteo = document.getElementById('conteo-reporte');
+  tbody.innerHTML = '<tr><td colspan="11" class="sin-datos">Cargando órdenes...</td></tr>';
+  conteo.textContent = '';
+
+  var filtrosServidor = {
+    estado: document.getElementById('filtro-estado-reporte').value || null,
+    id_vendedor: document.getElementById('filtro-vendedor').value || null
+  };
+  // Pasar null si no hay filtros de servidor
+  if (!filtrosServidor.estado && !filtrosServidor.id_vendedor) filtrosServidor = null;
+
+  google.script.run
+    .withSuccessHandler(function(ordenes) {
+      console.log('[filtrarReporte] Órdenes recibidas:', ordenes ? ordenes.length : 0);
+      if (!ordenes || ordenes.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="11" class="sin-datos">No hay órdenes con estos filtros</td></tr>';
+        conteo.textContent = 'Mostrando 0 órdenes';
+        return;
+      }
+
+      // Aplicar filtros adicionales del lado del cliente
+      var filtros = obtenerFiltrosReporte();
+      var resultado = ordenes;
+
+      // Filtro por fecha inicio
+      if (filtros.fecha_inicio) {
+        resultado = resultado.filter(function(o) {
+          return String(o.fecha || '').substring(0, 10) >= filtros.fecha_inicio;
+        });
+      }
+      // Filtro por fecha fin
+      if (filtros.fecha_fin) {
+        resultado = resultado.filter(function(o) {
+          return String(o.fecha || '').substring(0, 10) <= filtros.fecha_fin;
+        });
+      }
+      // Filtro por cliente (texto libre)
+      if (filtros.cliente) {
+        resultado = resultado.filter(function(o) {
+          return String(o.nombre_cliente || '').toLowerCase().indexOf(filtros.cliente) !== -1;
+        });
+      }
+
+      conteo.textContent = 'Mostrando ' + resultado.length + ' órdenes';
+
+      if (resultado.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="11" class="sin-datos">No hay órdenes con estos filtros</td></tr>';
+        return;
+      }
+
+      renderizarTablaReporte(resultado);
+    })
+    .withFailureHandler(function(error) {
+      console.error('[filtrarReporte] Error:', error);
+      tbody.innerHTML = '<tr><td colspan="11" class="sin-datos">Error al cargar: ' + error.message + '</td></tr>';
+      conteo.textContent = '';
+    })
+    .obtenerOrdenes(filtrosServidor);
+}
+
+// Renderizar tabla de previsualización del reporte
+function renderizarTablaReporte(ordenes) {
+  var tbody = document.getElementById('tbody-reporte');
+  var html = '';
+
+  for (var i = 0; i < ordenes.length; i++) {
+    var o = ordenes[i];
+    var fechaCorta = String(o.fecha || '').substring(0, 10);
+    var horaStr = String(o.hora_creacion || '');
+    if (horaStr.length > 10 && horaStr.indexOf(' ') !== -1) {
+      horaStr = horaStr.split(' ')[1] || horaStr;
+    }
+    var limiteCorta = o.fecha_limite_devolucion ? String(o.fecha_limite_devolucion).substring(0, 10) : '—';
+    var badgeClass = obtenerClaseBadge(o.estado);
+
+    // Color de fila según estado
+    var estiloFila = '';
+    if (o.estado === 'Por Cobrar/Devolver') estiloFila = ' style="background:#ffcccc;"';
+    else if (o.estado === 'Regresado') estiloFila = ' style="background:#f5f5f5;"';
+
+    html += '<tr' + estiloFila + '>' +
+      '<td><strong>' + (o.numero_op || '—') + '</strong></td>' +
+      '<td>' + fechaCorta + '</td>' +
+      '<td>' + (o.nombre_cliente || '—') + '</td>' +
+      '<td>' + (o.local_origen || '—') + '</td>' +
+      '<td>' + (o.nombre_vendedor || '—') + '</td>' +
+      '<td>' + (o.nombre_receptor || '—') + '</td>' +
+      '<td>' + formatearMoneda(o.valor_total || 0) + '</td>' +
+      '<td>' + horaStr + '</td>' +
+      '<td>' + limiteCorta + '</td>' +
+      '<td><span class="badge ' + badgeClass + '">' + (o.estado || '—') + '</span></td>' +
+      '<td>' + (o.observaciones || '—') + '</td>' +
+      '</tr>';
+  }
+
+  tbody.innerHTML = html;
+}
+
+// Limpiar todos los filtros del reporte y recargar
+function limpiarFiltrosReporte() {
+  document.getElementById('filtro-fecha-inicio').value = '';
+  document.getElementById('filtro-fecha-fin').value = '';
+  document.getElementById('filtro-estado-reporte').value = '';
+  document.getElementById('filtro-vendedor').value = '';
+  document.getElementById('filtro-cliente-reporte').value = '';
+  // Limpiar tabla y contador
+  document.getElementById('tbody-reporte').innerHTML =
+    '<tr><td colspan="11" class="sin-datos">Haga clic en "Filtrar" para previsualizar órdenes</td></tr>';
+  document.getElementById('conteo-reporte').textContent = '';
+}
+
+// Cargar lista de vendedores en el dropdown del reporte
+function cargarVendedoresReporte() {
+  google.script.run
+    .withSuccessHandler(function(usuarios) {
+      var select = document.getElementById('filtro-vendedor');
+      // Mantener la opción "Todos"
+      select.innerHTML = '<option value="">Todos</option>';
+      for (var i = 0; i < usuarios.length; i++) {
+        var u = usuarios[i];
+        if (u.activo === 'Sí') {
+          var option = document.createElement('option');
+          option.value = u.id_usuario;
+          option.textContent = u.nombre;
+          select.appendChild(option);
+        }
+      }
+    })
+    .obtenerUsuarios();
+}
+
+// Descargar reporte Excel usando los filtros actuales
+function descargarExcel() {
+  var filtros = obtenerFiltrosReporte();
+  // Ajustar para que el servidor entienda el estado correctamente
+  if (filtros.estado === '') filtros.estado = 'Todos';
 
   google.script.run
     .withSuccessHandler(function(resultado) {

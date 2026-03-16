@@ -241,8 +241,8 @@
             </div>
             <div class="campo-form">
               <label>Estado</label>
-              <select id="filtro-estado">
-                <option value="Todos">Todos</option>
+              <select id="filtro-estado-reporte">
+                <option value="">Todos</option>
                 <option value="Pendiente">Pendiente</option>
                 <option value="Prestado">Prestado</option>
                 <option value="Por Cobrar/Devolver">Por Cobrar/Devolver</option>
@@ -256,28 +256,47 @@
                 <option value="">Todos</option>
               </select>
             </div>
+            <div class="campo-form">
+              <label>Cliente / Local</label>
+              <input type="text" id="filtro-cliente-reporte" placeholder="Buscar cliente...">
+            </div>
           </div>
-          <button class="btn-nueva-orden" onclick="descargarExcel()">
-            <span class="material-icons">download</span> Descargar Excel
-          </button>
+          <div class="reportes-botones">
+            <button class="btn-nueva-orden" onclick="filtrarReporte()">
+              <span class="material-icons">search</span> Filtrar
+            </button>
+            <button class="btn-limpiar-filtros" onclick="limpiarFiltrosReporte()">
+              <span class="material-icons" style="font-size:16px;">filter_alt_off</span> Limpiar
+            </button>
+            <button class="btn-nueva-orden" onclick="descargarExcel()">
+              <span class="material-icons">download</span> Descargar Excel
+            </button>
+          </div>
         </div>
         <div id="preview-reporte">
           <p id="conteo-reporte" class="conteo-registros"></p>
-          <table class="tabla-principal" id="tabla-reporte">
-            <thead>
-              <tr>
-                <th>N° OP</th>
-                <th>Fecha</th>
-                <th>Cliente</th>
-                <th>Vendedor</th>
-                <th>Valor</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody id="tbody-reporte">
-              <tr><td colspan="6" class="sin-datos">Seleccione filtros para previsualizar</td></tr>
-            </tbody>
-          </table>
+          <div style="overflow-x:auto;">
+            <table class="tabla-principal" id="tabla-reporte">
+              <thead>
+                <tr>
+                  <th>N° OP</th>
+                  <th>Fecha</th>
+                  <th>Cliente</th>
+                  <th>Local origen</th>
+                  <th>Vendedor</th>
+                  <th>Recibe</th>
+                  <th>Valor total</th>
+                  <th>Hora</th>
+                  <th>Fecha límite</th>
+                  <th>Estado</th>
+                  <th>Observaciones</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-reporte">
+                <tr><td colspan="11" class="sin-datos">Haga clic en "Filtrar" para previsualizar órdenes</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
     </main>
