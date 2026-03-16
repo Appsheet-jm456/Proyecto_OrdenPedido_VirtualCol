@@ -132,12 +132,15 @@ function filtrarPorEstado(estado) {
 
 // ==================== ÓRDENES ====================
 function cargarOrdenes() {
+  console.log('[cargarOrdenes] Iniciando carga de órdenes...');
   google.script.run
     .withSuccessHandler(function(ordenes) {
-      ordenesCache = ordenes;
+      console.log('[cargarOrdenes] Respuesta recibida. Órdenes:', ordenes ? ordenes.length : 'null');
+      ordenesCache = ordenes || [];
       renderizarOrdenes();
     })
     .withFailureHandler(function(error) {
+      console.error('[cargarOrdenes] Error del servidor:', error);
       document.getElementById('tbody-ordenes').innerHTML =
         '<tr><td colspan="8" class="sin-datos">Error al cargar órdenes: ' + error.message + '</td></tr>';
     })
@@ -146,45 +149,65 @@ function cargarOrdenes() {
 
 function renderizarOrdenes() {
   var tbody = document.getElementById('tbody-ordenes');
-  var ordenes = ordenesCache;
 
-  // Aplicar filtro de estado si existe
-  if (filtroEstadoActual) {
-    ordenes = ordenes.filter(function(o) {
-      return o.estado === filtroEstadoActual;
-    });
-  }
+  try {
+    var ordenes = ordenesCache;
+    console.log('[renderizarOrdenes] Total en cache:', ordenes.length, '| Filtro activo:', filtroEstadoActual || 'ninguno');
 
-  if (ordenes.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="sin-datos">No hay órdenes' +
-      (filtroEstadoActual ? ' con estado "' + filtroEstadoActual + '"' : '') + '</td></tr>';
-    return;
-  }
-
-  var html = '';
-  for (var i = 0; i < ordenes.length; i++) {
-    var o = ordenes[i];
-    var badgeClass = obtenerClaseBadge(o.estado);
-
-    var fechaHtml = o.fecha;
-    if (o.estado === 'Prestado' && o.fecha_limite_devolucion) {
-      fechaHtml += '<br><small class="texto-rojo">Límite: ' + o.fecha_limite_devolucion.substring(0, 10) + '</small>';
+    // Aplicar filtro de estado si existe
+    if (filtroEstadoActual) {
+      ordenes = ordenes.filter(function(o) {
+        return o.estado === filtroEstadoActual;
+      });
     }
 
-    html += '<tr>' +
-      '<td><strong>' + o.numero_op + '</strong></td>' +
-      '<td>' + fechaHtml + '</td>' +
-      '<td>' + o.nombre_cliente + '</td>' +
-      '<td>' + o.nombre_vendedor + '</td>' +
-      '<td>$' + formatearNumero(0) + '</td>' +
-      '<td>' + o.hora_creacion + '</td>' +
-      '<td><span class="badge ' + badgeClass + '">' + o.estado + '</span></td>' +
-      '<td><button class="btn-accion" onclick="verOrden(' + o.id_op + ')">' +
-      '<span class="material-icons">visibility</span> Ver</button></td>' +
-      '</tr>';
-  }
+    if (ordenes.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" class="sin-datos">No hay órdenes' +
+        (filtroEstadoActual ? ' con estado "' + filtroEstadoActual + '"' : '') + '</td></tr>';
+      return;
+    }
 
-  tbody.innerHTML = html;
+    var html = '';
+    for (var i = 0; i < ordenes.length; i++) {
+      var o = ordenes[i];
+      var badgeClass = obtenerClaseBadge(o.estado);
+
+      // Extraer solo la parte de fecha (yyyy-MM-dd) de forma segura
+      var fechaCorta = String(o.fecha || '').substring(0, 10);
+      var fechaHtml = fechaCorta;
+
+      if (o.estado === 'Prestado' && o.fecha_limite_devolucion) {
+        var limiteCorta = String(o.fecha_limite_devolucion).substring(0, 10);
+        fechaHtml += '<br><small class="texto-rojo">Límite: ' + limiteCorta + '</small>';
+      }
+
+      // Extraer solo la hora (HH:mm:ss) de forma segura
+      var horaStr = String(o.hora_creacion || '');
+      // Si viene como "yyyy-MM-dd HH:mm:ss", extraer solo la hora
+      if (horaStr.length > 10 && horaStr.indexOf(' ') !== -1) {
+        horaStr = horaStr.split(' ')[1] || horaStr;
+      }
+
+      html += '<tr>' +
+        '<td><strong>' + (o.numero_op || '—') + '</strong></td>' +
+        '<td>' + fechaHtml + '</td>' +
+        '<td>' + (o.nombre_cliente || '—') + '</td>' +
+        '<td>' + (o.nombre_vendedor || '—') + '</td>' +
+        '<td>$' + formatearNumero(0) + '</td>' +
+        '<td>' + horaStr + '</td>' +
+        '<td><span class="badge ' + badgeClass + '">' + (o.estado || '—') + '</span></td>' +
+        '<td><button class="btn-accion" onclick="verOrden(' + o.id_op + ')">' +
+        '<span class="material-icons">visibility</span> Ver</button></td>' +
+        '</tr>';
+    }
+
+    tbody.innerHTML = html;
+    console.log('[renderizarOrdenes] Tabla renderizada con ' + ordenes.length + ' filas');
+
+  } catch (e) {
+    console.error('[renderizarOrdenes] Error al renderizar:', e);
+    tbody.innerHTML = '<tr><td colspan="8" class="sin-datos">Error al mostrar órdenes: ' + e.message + '</td></tr>';
+  }
 }
 
 function obtenerClaseBadge(estado) {

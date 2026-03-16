@@ -498,80 +498,122 @@ function crearOrden(datosOrden, detalleItems) {
 }
 
 function obtenerOrdenes(filtros) {
-  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  var hojaOP = ss.getSheetByName('Orden_Pedido');
-  var hojaClientes = ss.getSheetByName('Clientes');
-  var hojaUsuarios = ss.getSheetByName('Usuarios');
+  try {
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var hojaOP = ss.getSheetByName('Orden_Pedido');
+    var hojaClientes = ss.getSheetByName('Clientes');
+    var hojaUsuarios = ss.getSheetByName('Usuarios');
 
-  var datosOP = hojaOP.getDataRange().getValues();
-  var datosClientes = hojaClientes.getDataRange().getValues();
-  var datosUsuarios = hojaUsuarios.getDataRange().getValues();
+    // Validar que las hojas existan
+    if (!hojaOP) throw new Error('Hoja "Orden_Pedido" no encontrada');
+    if (!hojaClientes) throw new Error('Hoja "Clientes" no encontrada');
+    if (!hojaUsuarios) throw new Error('Hoja "Usuarios" no encontrada');
 
-  // Mapas para lookup rápido
-  var mapaClientes = {};
-  for (var c = 1; c < datosClientes.length; c++) {
-    mapaClientes[datosClientes[c][0]] = datosClientes[c][1]; // id -> nombre_local
-  }
+    var datosOP = hojaOP.getDataRange().getValues();
+    var datosClientes = hojaClientes.getDataRange().getValues();
+    var datosUsuarios = hojaUsuarios.getDataRange().getValues();
 
-  var mapaUsuarios = {};
-  for (var u = 1; u < datosUsuarios.length; u++) {
-    mapaUsuarios[datosUsuarios[u][0]] = datosUsuarios[u][1]; // id -> nombre
-  }
+    // Si solo hay encabezados, retornar vacío
+    if (datosOP.length <= 1) return [];
 
-  var encabezados = datosOP[0];
-  var ordenes = [];
-
-  for (var i = 1; i < datosOP.length; i++) {
-    var obj = {};
-    for (var j = 0; j < encabezados.length; j++) {
-      obj[encabezados[j]] = datosOP[i][j];
+    // Mapas para lookup rápido (convertir clave a string para evitar desajuste de tipos)
+    var mapaClientes = {};
+    for (var c = 1; c < datosClientes.length; c++) {
+      mapaClientes[String(datosClientes[c][0])] = datosClientes[c][1]; // id -> nombre_local
     }
 
-    // Agregar nombres legibles
-    obj.nombre_cliente = mapaClientes[obj.id_cliente] || 'Desconocido';
-    obj.nombre_vendedor = mapaUsuarios[obj.id_vendedor] || 'Desconocido';
+    var mapaUsuarios = {};
+    for (var u = 1; u < datosUsuarios.length; u++) {
+      mapaUsuarios[String(datosUsuarios[u][0])] = datosUsuarios[u][1]; // id -> nombre
+    }
 
-    // Aplicar filtros
-    var incluir = true;
-    if (filtros) {
-      if (filtros.estado && filtros.estado !== 'Todos' && obj.estado !== filtros.estado) {
-        incluir = false;
+    var encabezados = datosOP[0];
+    var ordenes = [];
+
+    for (var i = 1; i < datosOP.length; i++) {
+      var fila = datosOP[i];
+
+      // Saltar filas vacías (sin id_op)
+      if (!fila[0] && fila[0] !== 0) continue;
+
+      var obj = {};
+      for (var j = 0; j < encabezados.length; j++) {
+        var valor = fila[j];
+
+        // Convertir objetos Date a string legible para evitar errores en el cliente
+        if (valor instanceof Date) {
+          obj[encabezados[j]] = Utilities.formatDate(valor, 'America/Bogota', 'yyyy-MM-dd HH:mm:ss');
+        } else {
+          obj[encabezados[j]] = valor;
+        }
       }
-      if (filtros.id_vendedor && obj.id_vendedor != filtros.id_vendedor) {
-        incluir = false;
+
+      // Agregar nombres legibles (usar String() para asegurar match de tipos)
+      obj.nombre_cliente = mapaClientes[String(obj.id_cliente)] || 'Desconocido';
+      obj.nombre_vendedor = mapaUsuarios[String(obj.id_vendedor)] || 'Desconocido';
+
+      // Aplicar filtros
+      var incluir = true;
+      if (filtros) {
+        if (filtros.estado && filtros.estado !== 'Todos' && obj.estado !== filtros.estado) {
+          incluir = false;
+        }
+        if (filtros.id_vendedor && String(obj.id_vendedor) !== String(filtros.id_vendedor)) {
+          incluir = false;
+        }
+      }
+
+      if (incluir) {
+        ordenes.push(obj);
       }
     }
 
-    if (incluir) {
-      ordenes.push(obj);
-    }
+    // Ordenar por fecha descendente (las fechas ya son strings formato yyyy-MM-dd)
+    ordenes.sort(function(a, b) {
+      var fechaA = a.fecha || '';
+      var fechaB = b.fecha || '';
+      return fechaB.localeCompare(fechaA);
+    });
+
+    return ordenes;
+
+  } catch (e) {
+    Logger.log('Error en obtenerOrdenes: ' + e.message);
+    throw new Error('Error al obtener órdenes: ' + e.message);
   }
-
-  // Ordenar por fecha descendente
-  ordenes.sort(function(a, b) {
-    return new Date(b.fecha) - new Date(a.fecha);
-  });
-
-  return ordenes;
 }
 
 function obtenerDetalleOrden(idOp) {
-  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  var hoja = ss.getSheetByName('Detalle_Pedido');
-  var datos = hoja.getDataRange().getValues();
-  var encabezados = datos[0];
-  var resultado = [];
+  try {
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var hoja = ss.getSheetByName('Detalle_Pedido');
+    if (!hoja) throw new Error('Hoja "Detalle_Pedido" no encontrada');
 
-  for (var i = 1; i < datos.length; i++) {
-    if (datos[i][1] == idOp) { // columna id_op
-      var obj = {};
-      for (var j = 0; j < encabezados.length; j++) {
-        obj[encabezados[j]] = datos[i][j];
+    var datos = hoja.getDataRange().getValues();
+    var encabezados = datos[0];
+    var resultado = [];
+
+    for (var i = 1; i < datos.length; i++) {
+      if (String(datos[i][1]) == String(idOp)) { // columna id_op (comparación segura)
+        var obj = {};
+        for (var j = 0; j < encabezados.length; j++) {
+          var valor = datos[i][j];
+          // Convertir objetos Date a string
+          if (valor instanceof Date) {
+            obj[encabezados[j]] = Utilities.formatDate(valor, 'America/Bogota', 'yyyy-MM-dd HH:mm:ss');
+          } else {
+            obj[encabezados[j]] = valor;
+          }
+        }
+        resultado.push(obj);
       }
-      resultado.push(obj);
     }
+    return resultado;
+
+  } catch (e) {
+    Logger.log('Error en obtenerDetalleOrden: ' + e.message);
+    throw new Error('Error al obtener detalle: ' + e.message);
   }
-  return resultado;
 }
 
 // ============================================================
