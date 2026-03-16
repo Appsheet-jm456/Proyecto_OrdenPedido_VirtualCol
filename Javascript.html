@@ -282,7 +282,7 @@ function renderizarOrdenes() {
         '<td>' + fechaHtml + '</td>' +
         '<td>' + (o.nombre_cliente || '—') + '</td>' +
         '<td>' + vendedorHtml + '</td>' +
-        '<td>$' + formatearNumero(0) + '</td>' +
+        '<td>' + formatearMoneda(o.valor_total || 0) + '</td>' +
         '<td>' + horaStr + '</td>' +
         '<td><span class="badge ' + badgeClass + '">' + (o.estado || '—') + '</span></td>' +
         '<td><button class="btn-accion" onclick="verOrden(' + o.id_op + ')">' +
@@ -305,6 +305,7 @@ function renderizarOrdenes() {
           '<div class="linea-card"><span class="etiqueta">Fecha</span><span>' + fechaCorta + '</span></div>' +
           '<div class="linea-card"><span class="etiqueta">Cliente</span><span>' + (o.nombre_cliente || '—') + '</span></div>' +
           '<div class="linea-card"><span class="etiqueta">Vendedor</span><span>' + (o.nombre_vendedor || '—') + '</span></div>' +
+          '<div class="linea-card"><span class="etiqueta">Valor</span><strong>' + formatearMoneda(o.valor_total || 0) + '</strong></div>' +
           receptorCard +
           limiteCard +
         '</div>' +
@@ -340,6 +341,16 @@ function obtenerClaseBadge(estado) {
 
 function formatearNumero(num) {
   return Number(num).toLocaleString('es-CO');
+}
+
+// Formatear como moneda colombiana (COP sin decimales)
+function formatearMoneda(valor) {
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(valor);
 }
 
 // ==================== VER / GESTIONAR ORDEN ====================

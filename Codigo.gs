@@ -70,7 +70,8 @@ function crearTablas() {
       'fecha_limite_devolucion',
       'dias_habiles_prestamo',
       'alerta_vencimiento',
-      'nombre_receptor'
+      'nombre_receptor',
+      'valor_total'
     ],
     'Detalle_Pedido': [
       'id_detalle',
@@ -288,6 +289,86 @@ function agregarColumnaNombreReceptor() {
 }
 
 // ============================================================
+// Migración: agregar columna valor_total a Orden_Pedido
+// Ejecutar UNA VEZ si la hoja ya existe sin esa columna
+// ============================================================
+function agregarColumnaValorTotal() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var hoja = ss.getSheetByName('Orden_Pedido');
+  if (!hoja) {
+    Logger.log('Hoja Orden_Pedido no existe');
+    return;
+  }
+
+  var encabezados = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0];
+  // Verificar si la columna ya existe
+  if (encabezados.indexOf('valor_total') !== -1) {
+    Logger.log('Columna valor_total ya existe');
+    return 'La columna ya existe';
+  }
+
+  // Agregar encabezado en la siguiente columna
+  var nuevaCol = encabezados.length + 1;
+  var celda = hoja.getRange(1, nuevaCol);
+  celda.setValue('valor_total');
+  celda.setBackground('#ffcf22');
+  celda.setFontWeight('bold');
+  celda.setHorizontalAlignment('center');
+  celda.setFontColor('#1a1a1a');
+
+  Logger.log('Columna valor_total agregada en posición ' + nuevaCol);
+  return 'Columna valor_total agregada exitosamente';
+}
+
+// ============================================================
+// Recalcular valor_total de todas las órdenes existentes
+// Suma valor_total de Detalle_Pedido para cada orden
+// Ejecutar UNA VEZ después de agregarColumnaValorTotal()
+// ============================================================
+function recalcularValoresTotales() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var hojaOP = ss.getSheetByName('Orden_Pedido');
+  var hojaDetalle = ss.getSheetByName('Detalle_Pedido');
+
+  if (!hojaOP || !hojaDetalle) {
+    Logger.log('Error: hojas no encontradas');
+    return;
+  }
+
+  var datosOP = hojaOP.getDataRange().getValues();
+  var datosDetalle = hojaDetalle.getDataRange().getValues();
+  var encabezadosOP = datosOP[0];
+
+  // Buscar índice de la columna valor_total en Orden_Pedido
+  var colValorTotal = encabezadosOP.indexOf('valor_total');
+  if (colValorTotal === -1) {
+    Logger.log('Columna valor_total no existe. Ejecuta agregarColumnaValorTotal() primero.');
+    return;
+  }
+
+  // Construir mapa de totales por id_op desde Detalle_Pedido
+  // Columnas en Detalle_Pedido: 0=id_detalle, 1=id_op, 6=valor_total
+  var totalesPorOrden = {};
+  for (var d = 1; d < datosDetalle.length; d++) {
+    var idOp = String(datosDetalle[d][1]);
+    var valorItem = Number(datosDetalle[d][6]) || 0;
+    totalesPorOrden[idOp] = (totalesPorOrden[idOp] || 0) + valorItem;
+  }
+
+  // Actualizar cada orden con su valor_total calculado
+  var actualizadas = 0;
+  for (var i = 1; i < datosOP.length; i++) {
+    var idOrden = String(datosOP[i][0]);
+    var valorCalculado = totalesPorOrden[idOrden] || 0;
+    hojaOP.getRange(i + 1, colValorTotal + 1).setValue(valorCalculado);
+    actualizadas++;
+  }
+
+  Logger.log('Valores recalculados para ' + actualizadas + ' órdenes');
+  return 'Recalculadas ' + actualizadas + ' órdenes';
+}
+
+// ============================================================
 // Función de inicialización completa
 // Ejecutar esta para configurar todo de una vez
 // ============================================================
@@ -484,6 +565,12 @@ function crearOrden(datosOrden, detalleItems) {
   var fecha = Utilities.formatDate(ahora, 'America/Bogota', 'yyyy-MM-dd');
   var hora = Utilities.formatDate(ahora, 'America/Bogota', 'HH:mm:ss');
 
+  // Calcular valor total de la orden sumando los ítems del detalle
+  var valorTotalOrden = 0;
+  for (var t = 0; t < detalleItems.length; t++) {
+    valorTotalOrden += (detalleItems[t].cantidad || 0) * (detalleItems[t].valor_unitario || 0);
+  }
+
   // Insertar orden
   var filaOrden = [
     nuevoIdOP,                    // id_op
@@ -499,7 +586,8 @@ function crearOrden(datosOrden, detalleItems) {
     '',                           // fecha_limite_devolucion
     1,                            // dias_habiles_prestamo (por defecto 1)
     '',                           // alerta_vencimiento
-    datosOrden.nombre_receptor || '' // nombre_receptor (quien recibe el equipo)
+    datosOrden.nombre_receptor || '', // nombre_receptor (quien recibe el equipo)
+    valorTotalOrden               // valor_total
   ];
 
   hojaOP.appendRow(filaOrden);
@@ -543,12 +631,25 @@ function obtenerOrdenes(filtros) {
     if (!hojaClientes) throw new Error('Hoja "Clientes" no encontrada');
     if (!hojaUsuarios) throw new Error('Hoja "Usuarios" no encontrada');
 
+    var hojaDetalle = ss.getSheetByName('Detalle_Pedido');
+    if (!hojaDetalle) throw new Error('Hoja "Detalle_Pedido" no encontrada');
+
     var datosOP = hojaOP.getDataRange().getValues();
     var datosClientes = hojaClientes.getDataRange().getValues();
     var datosUsuarios = hojaUsuarios.getDataRange().getValues();
+    var datosDetalle = hojaDetalle.getDataRange().getValues();
 
     // Si solo hay encabezados, retornar vacío
     if (datosOP.length <= 1) return [];
+
+    // Construir mapa de valor_total por id_op desde Detalle_Pedido
+    // Columnas: 0=id_detalle, 1=id_op, 6=valor_total
+    var totalesPorOrden = {};
+    for (var d = 1; d < datosDetalle.length; d++) {
+      var idOpDetalle = String(datosDetalle[d][1]);
+      var valorItem = Number(datosDetalle[d][6]) || 0;
+      totalesPorOrden[idOpDetalle] = (totalesPorOrden[idOpDetalle] || 0) + valorItem;
+    }
 
     // Mapas para lookup rápido (convertir clave a string para evitar desajuste de tipos)
     var mapaClientes = {};
@@ -585,6 +686,9 @@ function obtenerOrdenes(filtros) {
       // Agregar nombres legibles (usar String() para asegurar match de tipos)
       obj.nombre_cliente = mapaClientes[String(obj.id_cliente)] || 'Desconocido';
       obj.nombre_vendedor = mapaUsuarios[String(obj.id_vendedor)] || 'Desconocido';
+
+      // Calcular valor_total desde Detalle_Pedido (fuente confiable)
+      obj.valor_total = totalesPorOrden[String(obj.id_op)] || 0;
 
       // Aplicar filtros
       var incluir = true;
