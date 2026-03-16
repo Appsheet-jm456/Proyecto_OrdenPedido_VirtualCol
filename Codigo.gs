@@ -144,6 +144,109 @@ function crearTablas() {
 }
 
 // ============================================================
+// Crear hoja "Configuracion" con datos del negocio
+// Ejecutar UNA SOLA VEZ para inicializar la configuración
+// ============================================================
+function crearHojaConfiguracion() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var hoja = ss.getSheetByName('Configuracion');
+
+  if (!hoja) {
+    hoja = ss.insertSheet('Configuracion');
+    Logger.log('Hoja Configuracion creada');
+  } else {
+    hoja.clear();
+    Logger.log('Hoja Configuracion limpiada');
+  }
+
+  // Encabezados
+  var encabezados = ['parametro', 'valor', 'descripcion'];
+  hoja.getRange(1, 1, 1, 3).setValues([encabezados]);
+  hoja.getRange(1, 1, 1, 3).setBackground('#ffcf22').setFontWeight('bold')
+    .setHorizontalAlignment('center').setFontColor('#1a1a1a');
+  hoja.setFrozenRows(1);
+
+  // Datos iniciales del negocio
+  var datos = [
+    ['nombre_comercial', 'Ventas Virtuales Colombia', 'Nombre visible del negocio'],
+    ['direccion', 'Av 5 a # 23 D Norte - 66 Ctro Comercial Pasarela Local 2 - 107', 'Dirección física'],
+    ['nombre_juridico', 'Rafael Alfonso Perez Chavarro', 'Nombre persona jurídica'],
+    ['correo', 'rafyta1995@gmail.com', 'Correo de contacto'],
+    ['celular', '3175591252', 'Celular de contacto'],
+    ['logo_url', 'https://i.postimg.cc/mrb100Sv/Logo-PNG.png', 'URL pública del logo'],
+    ['ciudad', 'Cali, Colombia', 'Ciudad del negocio']
+  ];
+
+  hoja.getRange(2, 1, datos.length, 3).setValues(datos);
+
+  // Ajustar ancho de columnas
+  for (var j = 1; j <= 3; j++) {
+    hoja.autoResizeColumn(j);
+  }
+
+  Logger.log('Hoja Configuracion creada con datos iniciales');
+  return 'Hoja Configuracion creada exitosamente';
+}
+
+// ============================================================
+// Leer configuración del negocio desde hoja Configuracion
+// Retorna objeto clave-valor con todos los parámetros
+// ============================================================
+function getConfiguracion() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var hoja = ss.getSheetByName('Configuracion');
+
+  if (!hoja) {
+    // Retornar valores por defecto si la hoja no existe
+    return {
+      nombre_comercial: 'Ventas Virtuales Colombia',
+      direccion: 'Av 5 a # 23 D Norte - 66 Ctro Comercial Pasarela Local 2 - 107',
+      nombre_juridico: 'Rafael Alfonso Perez Chavarro',
+      correo: 'rafyta1995@gmail.com',
+      celular: '3175591252',
+      logo_url: 'https://i.postimg.cc/mrb100Sv/Logo-PNG.png',
+      ciudad: 'Cali, Colombia'
+    };
+  }
+
+  var datos = hoja.getDataRange().getValues();
+  var config = {};
+
+  // Saltar fila 1 (encabezados), recorrer desde fila 2
+  for (var i = 1; i < datos.length; i++) {
+    if (datos[i][0]) {
+      config[datos[i][0]] = datos[i][1] !== undefined ? String(datos[i][1]) : '';
+    }
+  }
+
+  return config;
+}
+
+// ============================================================
+// Actualizar un parámetro de configuración
+// Busca la fila donde columna A === parametro y actualiza columna B
+// ============================================================
+function actualizarConfiguracion(parametro, valor) {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var hoja = ss.getSheetByName('Configuracion');
+
+  if (!hoja) {
+    return { ok: false, mensaje: 'Hoja Configuracion no encontrada' };
+  }
+
+  var datos = hoja.getDataRange().getValues();
+
+  for (var i = 1; i < datos.length; i++) {
+    if (datos[i][0] === parametro) {
+      hoja.getRange(i + 1, 2).setValue(valor);
+      return { ok: true };
+    }
+  }
+
+  return { ok: false, mensaje: 'Parámetro no encontrado: ' + parametro };
+}
+
+// ============================================================
 // Insertar usuario Super Admin por defecto
 // Ejecutar después de crearTablas()
 // ============================================================
@@ -1151,8 +1254,11 @@ function generarReporteExcel(filtros) {
   var hoja1 = tempSS.getActiveSheet();
   hoja1.setName('Órdenes');
 
-  // Título
-  hoja1.getRange(1, 1).setValue('Ventas Virtuales Colombia — Reporte de Órdenes de Pedido');
+  // Leer configuración del negocio para el reporte
+  var configNegocio = getConfiguracion();
+
+  // Título dinámico desde configuración
+  hoja1.getRange(1, 1).setValue(configNegocio.nombre_comercial + ' — Reporte de Órdenes de Pedido');
   hoja1.getRange(1, 1, 1, 12).merge();
   hoja1.getRange(1, 1).setFontWeight('bold').setFontSize(14);
 
@@ -1209,6 +1315,11 @@ function generarReporteExcel(filtros) {
       [estados[e], contadores[estados[e]], 0] // TODO: calcular valor total por estado
     ]);
   }
+
+  // Pie del reporte con datos de contacto
+  var filaPie = filaResumen + estados.length + 2;
+  hoja2.getRange(filaPie, 1).setValue('Contacto: ' + configNegocio.celular + ' | ' + configNegocio.correo);
+  hoja2.getRange(filaPie, 1).setFontSize(9).setFontColor('#888888');
 
   // Obtener URL de descarga
   var tempFile = DriveApp.getFileById(tempSS.getId());

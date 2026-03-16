@@ -13,33 +13,51 @@
   <!-- ==================== LOGIN ==================== -->
   <div id="pantalla-login" class="login-container">
     <div class="login-card">
-      <div class="login-logo">
-        <h1>Ventas Virtuales<br>Colombia</h1>
-        <p class="login-subtitulo">Sistema de Órdenes de Pedido</p>
+      <!-- Spinner de carga inicial -->
+      <div id="login-loading" class="login-loading">
+        <div class="spinner"></div>
+        <p>Cargando...</p>
       </div>
-      <form id="form-login" onsubmit="return false;">
-        <div class="campo-form">
-          <label for="login-email">Correo electrónico</label>
-          <input type="email" id="login-email" placeholder="correo@ejemplo.com" required>
+      <!-- Contenido del login (oculto hasta cargar config) -->
+      <div id="login-contenido" style="display:none;">
+        <div class="login-logo">
+          <img id="login-logo-img" src="" alt="Logo" class="login-logo-img" style="display:none;">
+          <h1 id="login-nombre-comercial">Ventas Virtuales<br>Colombia</h1>
+          <p id="login-ciudad" class="login-ciudad">Cali, Colombia</p>
+          <hr class="login-separador">
+          <p class="login-subtitulo">Sistema de Órdenes de Pedido</p>
         </div>
-        <div class="campo-form">
-          <label for="login-password">Contraseña</label>
-          <input type="password" id="login-password" placeholder="••••••••" required>
-        </div>
-        <div id="login-error" class="mensaje-error" style="display:none;"></div>
-        <button type="submit" class="btn-principal" onclick="iniciarSesion()">Ingresar</button>
-      </form>
-      <p class="login-footer">Av 5 a # 23 D Norte - 66<br>Ctro Comercial Pasarela Local 2 - 107<br>Cel: 3175591252</p>
+        <form id="form-login" onsubmit="return false;">
+          <div class="campo-form">
+            <label for="login-email">Correo electrónico</label>
+            <input type="email" id="login-email" placeholder="correo@ejemplo.com" required>
+          </div>
+          <div class="campo-form">
+            <label for="login-password">Contraseña</label>
+            <input type="password" id="login-password" placeholder="••••••••" required>
+          </div>
+          <div id="login-error" class="mensaje-error" style="display:none;"></div>
+          <button type="submit" class="btn-principal" onclick="iniciarSesion()">Ingresar</button>
+        </form>
+        <p id="login-footer" class="login-footer">Av 5 a # 23 D Norte - 66<br>Ctro Comercial Pasarela Local 2 - 107<br>Cel: 3175591252</p>
+      </div>
     </div>
   </div>
 
   <!-- ==================== DASHBOARD ==================== -->
   <div id="pantalla-dashboard" class="dashboard-container" style="display:none;">
 
+    <!-- Header mobile: logo + nombre (visible solo en < 768px) -->
+    <div id="mobile-header" class="mobile-header">
+      <img id="mobile-header-logo" src="" alt="Logo" class="mobile-header-logo" style="display:none;">
+      <span id="mobile-header-nombre" class="mobile-header-nombre">Ventas Virtuales Colombia</span>
+    </div>
+
     <!-- Sidebar izquierdo -->
     <aside class="sidebar">
       <div class="sidebar-header">
-        <h2>Ventas Virtuales<br>Colombia</h2>
+        <img id="sidebar-logo-img" src="" alt="Logo" class="sidebar-logo-img" style="display:none;">
+        <h2 id="sidebar-nombre-comercial">Ventas Virtuales<br>Colombia</h2>
         <p>Órdenes de Pedido</p>
       </div>
       <div class="sidebar-cards">
@@ -82,6 +100,9 @@
           <button class="tab" data-tab="productos" id="tab-productos" style="display:none;" onclick="cambiarTab('productos')">Productos</button>
           <button class="tab" data-tab="usuarios" id="tab-usuarios" style="display:none;" onclick="cambiarTab('usuarios')">Usuarios</button>
           <button class="tab" data-tab="reportes" id="tab-reportes" style="display:none;" onclick="cambiarTab('reportes')">Reportes</button>
+          <button class="tab" data-tab="configuracion" id="tab-configuracion" style="display:none;" onclick="cambiarTab('configuracion')">
+            <span class="material-icons" style="font-size:16px; vertical-align:middle;">settings</span> Configuración
+          </button>
         </div>
         <button class="btn-nueva-orden" onclick="abrirModalNuevaOrden()">
           <span class="material-icons">add</span> Nueva Orden
@@ -299,6 +320,34 @@
           </div>
         </div>
       </section>
+
+      <!-- Tab: Configuración (solo Super admin) -->
+      <section id="seccion-configuracion" class="seccion-tab" style="display:none;">
+        <div class="seccion-header">
+          <h3><span class="material-icons" style="vertical-align:middle; margin-right:6px;">settings</span>Configuración del Negocio</h3>
+        </div>
+        <div class="config-tabla-container">
+          <table class="tabla-principal" id="tabla-configuracion">
+            <thead>
+              <tr>
+                <th>Parámetro</th>
+                <th>Valor</th>
+                <th>Descripción</th>
+                <th>Preview</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-configuracion">
+              <tr><td colspan="4" class="sin-datos">Cargando configuración...</td></tr>
+            </tbody>
+          </table>
+          <div class="config-acciones">
+            <button class="btn-principal" id="btn-guardar-config" onclick="guardarConfiguracion()" style="width:auto; padding:12px 28px;">
+              <span class="material-icons" style="font-size:16px; vertical-align:middle;">save</span> Guardar cambios
+            </button>
+            <span id="config-mensaje" class="config-mensaje" style="display:none;"></span>
+          </div>
+        </div>
+      </section>
     </main>
 
     <!-- FAB: botón flotante para Nueva Orden (visible solo en móvil) -->
@@ -447,6 +496,13 @@
   <!-- ==================== MODAL: Ver / Gestionar Orden ==================== -->
   <div id="modal-ver-orden" class="modal-overlay" style="display:none;">
     <div class="modal-contenido modal-grande">
+      <!-- Encabezado para impresión PDF (oculto en pantalla) -->
+      <div class="print-header">
+        <img id="print-logo-img" src="" alt="Logo" class="print-logo-img">
+        <h1 id="print-nombre-comercial">Ventas Virtuales Colombia</h1>
+        <p id="print-direccion">Av 5 a # 23 D Norte - 66 Ctro Comercial Pasarela Local 2 - 107</p>
+        <p id="print-contacto">Cel: 3175591252 | rafyta1995@gmail.com</p>
+      </div>
       <div class="modal-header">
         <h3 id="modal-titulo-op">Orden OP-...</h3>
         <button class="btn-cerrar-modal" onclick="cerrarModal('modal-ver-orden')">&times;</button>
@@ -514,6 +570,11 @@
         <button class="btn-imprimir" onclick="imprimirOrden()">
           <span class="material-icons">print</span> Imprimir PDF
         </button>
+      </div>
+      <!-- Pie de página para impresión PDF (oculto en pantalla) -->
+      <div class="print-footer">
+        <p id="print-footer-fecha"></p>
+        <p id="print-footer-estado"></p>
       </div>
     </div>
   </div>
