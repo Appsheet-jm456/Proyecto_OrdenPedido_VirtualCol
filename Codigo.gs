@@ -369,6 +369,64 @@ function recalcularValoresTotales() {
 }
 
 // ============================================================
+// Migración: convertir id_op numérico a UUID alfanumérico
+// EJECUTAR UNA SOLA VEZ desde el editor de Apps Script
+// Actualiza Orden_Pedido (col A) y Detalle_Pedido (col B)
+// ============================================================
+function migracionIdOp() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var hojaOP = ss.getSheetByName('Orden_Pedido');
+  var hojaDetalle = ss.getSheetByName('Detalle_Pedido');
+
+  if (!hojaOP || !hojaDetalle) {
+    Logger.log('Error: hojas no encontradas');
+    return;
+  }
+
+  var datosOP = hojaOP.getDataRange().getValues();
+  var datosDetalle = hojaDetalle.getDataRange().getValues();
+  var migradas = 0;
+
+  for (var i = 1; i < datosOP.length; i++) {
+    var idActual = datosOP[i][0];
+
+    // Solo migrar si el id_op actual es numérico (no UUID)
+    if (idActual === '' || idActual === null || idActual === undefined) continue;
+    var idStr = String(idActual);
+
+    // Si ya parece UUID (contiene letras), saltar
+    if (/[A-Za-z]/.test(idStr)) continue;
+
+    // Generar nuevo UUID para esta orden
+    var nuevoUuid = generarIdUnico();
+
+    // Actualizar id_op en Orden_Pedido (columna A)
+    hojaOP.getRange(i + 1, 1).setValue(nuevoUuid);
+
+    // Actualizar id_op FK en todas las filas de Detalle_Pedido que coincidan
+    for (var d = 1; d < datosDetalle.length; d++) {
+      if (String(datosDetalle[d][1]) === idStr) {
+        hojaDetalle.getRange(d + 1, 2).setValue(nuevoUuid);
+        datosDetalle[d][1] = nuevoUuid; // Actualizar en memoria para evitar re-migración
+
+        // También migrar id_detalle si es numérico
+        var idDetalleActual = String(datosDetalle[d][0]);
+        if (!/[A-Za-z]/.test(idDetalleActual)) {
+          var nuevoIdDetalle = generarIdUnico();
+          hojaDetalle.getRange(d + 1, 1).setValue(nuevoIdDetalle);
+        }
+      }
+    }
+
+    migradas++;
+    Logger.log('Orden migrada: ' + idStr + ' → ' + nuevoUuid);
+  }
+
+  Logger.log('=== Migración completada. Órdenes migradas: ' + migradas + ' ===');
+  return 'Migración completada: ' + migradas + ' órdenes actualizadas a UUID';
+}
+
+// ============================================================
 // Función de inicialización completa
 // Ejecutar esta para configurar todo de una vez
 // ============================================================
@@ -606,6 +664,15 @@ function desactivarProducto(idProducto) {
 }
 
 // ============================================================
+// GENERADOR DE ID ÚNICO (UUID alfanumérico de 12 caracteres)
+// ============================================================
+function generarIdUnico() {
+  // Genera ID alfanumérico único de 12 caracteres en mayúsculas
+  // Ejemplo resultado: "A3F9B2C1D4E5"
+  return Utilities.getUuid().replace(/-/g, '').substring(0, 12).toUpperCase();
+}
+
+// ============================================================
 // CRUD — ÓRDENES DE PEDIDO
 // ============================================================
 // Generar número de OP con consecutivo GLOBAL que nunca reinicia
@@ -655,8 +722,8 @@ function crearOrden(datosOrden, detalleItems) {
   var hojaOP = ss.getSheetByName('Orden_Pedido');
   var hojaDetalle = ss.getSheetByName('Detalle_Pedido');
 
-  var ultimaFilaOP = hojaOP.getLastRow();
-  var nuevoIdOP = ultimaFilaOP;
+  // Generar UUID alfanumérico como id_op (llave primaria única)
+  var nuevoIdOP = generarIdUnico();
   var numeroOP = generarNumeroOP();
 
   var ahora = new Date();
@@ -669,10 +736,10 @@ function crearOrden(datosOrden, detalleItems) {
     valorTotalOrden += (detalleItems[t].cantidad || 0) * (detalleItems[t].valor_unitario || 0);
   }
 
-  // Insertar orden
+  // Insertar orden con id_op UUID
   var filaOrden = [
-    nuevoIdOP,                    // id_op
-    numeroOP,                     // numero_op
+    nuevoIdOP,                    // id_op (UUID alfanumérico)
+    numeroOP,                     // numero_op (OP-YYYYMMDD-NNN visible)
     datosOrden.id_cliente,        // id_cliente
     datosOrden.id_vendedor,       // id_vendedor
     fecha,                        // fecha
@@ -690,18 +757,16 @@ function crearOrden(datosOrden, detalleItems) {
 
   hojaOP.appendRow(filaOrden);
 
-  // Insertar detalle de cada ítem
-  var ultimaFilaDetalle = hojaDetalle.getLastRow();
-
+  // Insertar detalle de cada ítem con id_detalle UUID y FK id_op UUID
   for (var i = 0; i < detalleItems.length; i++) {
     var item = detalleItems[i];
-    var idDetalle = ultimaFilaDetalle + i;
+    var idDetalle = generarIdUnico(); // UUID único para cada ítem
     var valorTotal = (item.cantidad || 0) * (item.valor_unitario || 0);
 
     var filaDetalle = [
-      idDetalle,                       // id_detalle
-      nuevoIdOP,                       // id_op
-      item.id_producto || '',          // id_producto
+      idDetalle,                       // id_detalle (UUID)
+      nuevoIdOP,                       // id_op (FK → Orden_Pedido, UUID)
+      item.id_producto || '',          // id_producto (FK → Productos, o vacío si texto libre)
       item.descripcion_libre || '',    // descripcion_libre
       item.cantidad || 0,              // cantidad
       item.valor_unitario || 0,        // valor_unitario
@@ -866,7 +931,7 @@ function actualizarEstadoOrden(idOp, nuevoEstado, observaciones, nombreReceptor)
   var hora = Utilities.formatDate(ahora, 'America/Bogota', 'HH:mm:ss');
 
   for (var i = 1; i < datos.length; i++) {
-    if (datos[i][0] == idOp) {
+    if (String(datos[i][0]) === String(idOp)) {
       var fila = i + 1; // Fila en la hoja (1-indexed)
 
       // Actualizar estado (columna 7)
@@ -887,7 +952,7 @@ function actualizarEstadoOrden(idOp, nuevoEstado, observaciones, nombreReceptor)
         // Actualizar hora_entrega en detalle
         var datosDetalle = hojaDetalle.getDataRange().getValues();
         for (var d = 1; d < datosDetalle.length; d++) {
-          if (datosDetalle[d][1] == idOp) {
+          if (String(datosDetalle[d][1]) === String(idOp)) {
             hojaDetalle.getRange(d + 1, 9).setValue(hora); // hora_entrega
             hojaDetalle.getRange(d + 1, 8).setValue(ESTADOS.PRESTADO); // estado_item
           }
@@ -898,7 +963,7 @@ function actualizarEstadoOrden(idOp, nuevoEstado, observaciones, nombreReceptor)
       if (nuevoEstado === ESTADOS.REGRESADO) {
         var datosDetalle2 = hojaDetalle.getDataRange().getValues();
         for (var d2 = 1; d2 < datosDetalle2.length; d2++) {
-          if (datosDetalle2[d2][1] == idOp) {
+          if (String(datosDetalle2[d2][1]) === String(idOp)) {
             hojaDetalle.getRange(d2 + 1, 10).setValue(hora); // hora_regreso
             hojaDetalle.getRange(d2 + 1, 8).setValue(ESTADOS.REGRESADO); // estado_item
           }

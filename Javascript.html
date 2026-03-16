@@ -13,6 +13,7 @@ var productosCache = [];
 var itemsNuevaOrden = [];
 var ordenSeleccionada = null;
 var filtroEstadoActual = null;
+var itemProductoSeleccionado = ''; // id_producto del autocomplete (vacío si texto libre)
 
 // ==================== AUTENTICACIÓN ====================
 function iniciarSesion() {
@@ -291,7 +292,7 @@ function renderizarOrdenes() {
         '<td>' + formatearMoneda(o.valor_total || 0) + '</td>' +
         '<td>' + horaStr + '</td>' +
         '<td><span class="badge ' + badgeClass + '">' + (o.estado || '—') + '</span></td>' +
-        '<td><button class="btn-accion" onclick="verOrden(' + o.id_op + ')">' +
+        '<td><button class="btn-accion" onclick="verOrden(\'' + o.id_op + '\')">' +
         '<span class="material-icons">visibility</span> Ver</button></td>' +
         '</tr>';
 
@@ -316,7 +317,7 @@ function renderizarOrdenes() {
           limiteCard +
         '</div>' +
         '<div class="card-orden-mobile-footer">' +
-          '<button class="btn-accion" onclick="verOrden(' + o.id_op + ')">' +
+          '<button class="btn-accion" onclick="verOrden(\'' + o.id_op + '\')">' +
           '<span class="material-icons">visibility</span> Ver</button>' +
         '</div>' +
       '</div>';
@@ -445,14 +446,14 @@ function generarBotonesTransicion(estadoActual, idOp) {
   if (estadoActual === 'Pendiente') {
     // Mostrar campo obligatorio de receptor antes del botón
     campoReceptor.style.display = 'block';
-    html = '<button class="btn-estado btn-estado-prestado" onclick="cambiarEstado(' + idOp + ', \'Prestado\')">Marcar como Prestado</button>';
+    html = '<button class="btn-estado btn-estado-prestado" onclick="cambiarEstado(\'' + idOp + '\', \'Prestado\')">Marcar como Prestado</button>';
   } else if (estadoActual === 'Prestado' || estadoActual === 'Por Cobrar/Devolver') {
     campoReceptor.style.display = 'none';
-    html = '<button class="btn-estado btn-estado-facturado" onclick="cambiarEstado(' + idOp + ', \'Facturado\')">Marcar como Facturado</button>' +
-           '<button class="btn-estado btn-estado-regresado" onclick="cambiarEstado(' + idOp + ', \'Regresado\')">Marcar como Regresado</button>';
+    html = '<button class="btn-estado btn-estado-facturado" onclick="cambiarEstado(\'' + idOp + '\', \'Facturado\')">Marcar como Facturado</button>' +
+           '<button class="btn-estado btn-estado-regresado" onclick="cambiarEstado(\'' + idOp + '\', \'Regresado\')">Marcar como Regresado</button>';
   } else if (estadoActual === 'Facturado') {
     campoReceptor.style.display = 'none';
-    html = '<button class="btn-estado btn-estado-regresado" onclick="cambiarEstado(' + idOp + ', \'Regresado\')">Marcar como Regresado</button>';
+    html = '<button class="btn-estado btn-estado-regresado" onclick="cambiarEstado(\'' + idOp + '\', \'Regresado\')">Marcar como Regresado</button>';
   } else if (estadoActual === 'Regresado') {
     campoReceptor.style.display = 'none';
     html = '<p style="color:#999; font-size:13px;">Orden cerrada — no hay más transiciones disponibles.</p>';
@@ -512,7 +513,8 @@ function abrirModalNuevaOrden() {
   document.getElementById('btn-toggle-nuevo-cliente').style.display = 'inline-flex';
   limpiarFormClienteInline();
 
-  // Resetear buscador de productos y formulario inline de producto
+  // Resetear buscador de productos, selección y formulario inline de producto
+  itemProductoSeleccionado = '';
   document.getElementById('item-buscar-producto').value = '';
   document.getElementById('dropdown-productos').style.display = 'none';
   document.getElementById('form-nuevo-producto-inline').style.display = 'none';
@@ -564,16 +566,19 @@ function agregarItem() {
   }
 
   itemsNuevaOrden.push({
+    id_producto: itemProductoSeleccionado || '', // FK a Productos o vacío si texto libre
     descripcion_libre: desc,
     cantidad: cant,
     valor_unitario: valor,
     valor_total: cant * valor
   });
 
-  // Limpiar campos
+  // Limpiar campos y resetear producto seleccionado
   document.getElementById('item-descripcion').value = '';
   document.getElementById('item-cantidad').value = '1';
   document.getElementById('item-valor').value = '';
+  document.getElementById('item-buscar-producto').value = '';
+  itemProductoSeleccionado = '';
   document.getElementById('item-descripcion').focus();
 
   renderizarItemsNuevaOrden();
@@ -1137,6 +1142,7 @@ function buscarProductoAutocomplete() {
 }
 
 // Al seleccionar un producto del dropdown, pre-llenar los campos de ítem
+// y guardar el id_producto como FK para el Detalle_Pedido
 function seleccionarProductoAutocomplete(idProducto) {
   var producto = null;
   for (var i = 0; i < productosCache.length; i++) {
@@ -1149,6 +1155,7 @@ function seleccionarProductoAutocomplete(idProducto) {
   if (producto) {
     document.getElementById('item-descripcion').value = producto.nombre || '';
     document.getElementById('item-valor').value = producto.precio_ref || '';
+    itemProductoSeleccionado = String(producto.id_producto); // Guardar FK
   }
 
   // Limpiar buscador y cerrar dropdown
@@ -1227,9 +1234,10 @@ function guardarProductoInline() {
         };
         productosCache.push(nuevoProducto);
 
-        // Pre-llenar campos del ítem con el producto creado
+        // Pre-llenar campos del ítem con el producto creado y guardar FK
         document.getElementById('item-descripcion').value = datos.nombre;
         document.getElementById('item-valor').value = datos.precio_ref || '';
+        itemProductoSeleccionado = String(resultado.id_producto);
 
         // Mensaje de éxito
         msgDiv.textContent = 'Producto "' + datos.nombre + '" creado y seleccionado';
