@@ -31,6 +31,7 @@ Celular: 3175591252
    dias_habiles_prestamo, alerta_vencimiento
 5. Detalle_Pedido → id_detalle, id_op, id_producto, descripcion_libre, cantidad,
    valor_unitario, valor_total, estado_item, hora_entrega, hora_regreso
+6. Configuracion → parametro,	valor,	descripcion.
  
 ## Estados de una orden
 - Pendiente → recién creada, equipo aún en el local
@@ -222,8 +223,9 @@ const FESTIVOS_CO = [
 - Encabezado: logo, nombre, dirección, celular de Ventas Virtuales Colombia
 - Cuerpo: datos de la orden, Vendedor (empleado), Recibe (nombre_receptor),
   fecha préstamo, fecha límite devolución, tabla de detalle
+- Tabla detalle producto, precio y Valor y abajo valor total
 - Pie de página: fecha de impresión y estado actual
-- CSS @media print optimizado
+- Que se abra con HTML enlazado con Git Hub
  
 ## Reporte Excel XLSX
  
