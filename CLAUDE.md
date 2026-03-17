@@ -51,12 +51,13 @@ Celular: 3175591252
 - Festivos colombianos hardcodeados en el archivo Codigo.gs como array FESTIVOS_CO
 
 ## Número de OP
-Formato autogenerado: OP-YYYYMMDD-001 (correlativo por día)
+Formato autogenerado: OP-YYYYMMDD-001 (correlativo por día) y sera un numero que seguira consecutivo 
 
 ## Roles de usuario
 - Super admin: acceso total, gestión de usuarios, gestión de clientes, reportes
 - Vendedor: crear y ver sus propios pedidos
 - Auxiliar: ver pedidos, actualizar estado de órdenes asignadas
+- Soporte: Ver pedidos, crear productos. 
 
 ## Convenciones de código
 - Comentarios en español
