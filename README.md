@@ -126,9 +126,9 @@ En el editor de Apps Script → Triggers → Agregar trigger:
 | Rol | Permisos |
 |---|---|
 | Super admin | Todo: usuarios, clientes, productos, reportes, órdenes |
-| Vendedor | Crear y ver sus propias órdenes |
+| Vendedor | Crear y ver sus propias órdenes, Crear productos |
 | Auxiliar | Ver órdenes, actualizar estados |
-
+| Soporte | Ver órdenes, actualizar estados |
 ---
 
 ## 📊 Reporte Excel
@@ -158,11 +158,11 @@ claude -p "agrega validación de campos vacíos en nueva orden"
 
 - [x] Planeación y modelo de datos
 - [x] CLAUDE.md con contexto completo
-- [ ] Codigo.gs — backend completo
-- [ ] Index.html — estructura SPA
-- [ ] Estilos.html — diseño UI
-- [ ] Javascript.html — lógica cliente
-- [ ] Trigger automático de vencimientos
+- [x] Codigo.gs — backend completo
+- [x] Index.html — estructura SPA
+- [x] Estilos.html — diseño UI
+- [x] Javascript.html — lógica cliente
+- [x] Trigger automático de vencimientos
 - [ ] Módulo de reportes Excel
 - [ ] PDF formato carta
 - [ ] Pruebas y despliegue
