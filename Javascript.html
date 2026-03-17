@@ -136,26 +136,31 @@ function cerrarSesion() {
   document.getElementById('login-email').value = '';
   document.getElementById('login-password').value = '';
   document.getElementById('login-error').style.display = 'none';
+  // Cerrar sidebar mobile si estaba abierto
+  cerrarSidebarMobile();
 }
 
 // ==================== DASHBOARD ====================
 function mostrarDashboard() {
   document.getElementById('pantalla-login').style.display = 'none';
-  document.getElementById('pantalla-dashboard').style.display = 'flex';
-  document.getElementById('usuario-nombre').textContent = usuarioActual.nombre + ' (' + usuarioActual.rol + ')';
+  document.getElementById('pantalla-dashboard').style.display = 'block';
 
-  // Mostrar tabs según rol
-  if (usuarioActual.rol === 'Super admin') {
-    document.getElementById('tab-productos').style.display = 'inline-block';
-    document.getElementById('tab-usuarios').style.display = 'inline-block';
-    document.getElementById('tab-reportes').style.display = 'inline-block';
-    document.getElementById('tab-configuracion').style.display = 'inline-block';
-  } else if (usuarioActual.rol === 'Auxiliar') {
-    document.getElementById('tab-productos').style.display = 'inline-block';
-    document.getElementById('tab-reportes').style.display = 'inline-block';
-  }
+  // Mostrar info del usuario en el sidebar
+  var nombreUsuario = usuarioActual.nombre || '';
+  document.getElementById('sidebar-usuario-nombre').textContent = nombreUsuario;
+  document.getElementById('sidebar-usuario-rol').textContent = usuarioActual.rol || '';
 
-  // Aplicar configuración al sidebar y mobile header
+  // Generar iniciales para el avatar
+  var iniciales = nombreUsuario.split(' ').map(function(p) { return p.charAt(0); }).join('').substring(0, 2).toUpperCase();
+  document.getElementById('sidebar-avatar').textContent = iniciales || 'VV';
+
+  // Mostrar navegación según rol
+  aplicarPermisosPorRol(usuarioActual.rol);
+
+  // Inicializar sidebar (restaurar estado colapsado/expandido)
+  inicializarSidebar();
+
+  // Aplicar configuración al sidebar
   aplicarConfigDashboard();
 
   cargarContadores();
@@ -165,7 +170,7 @@ function mostrarDashboard() {
   cargarVendedoresReporte();
 }
 
-// Aplicar datos de appConfig al sidebar, navbar y mobile header
+// Aplicar datos de appConfig al sidebar y print header
 function aplicarConfigDashboard() {
   var config = window.appConfig;
 
@@ -177,27 +182,9 @@ function aplicarConfigDashboard() {
     sidebarLogo.onerror = function() { sidebarLogo.style.display = 'none'; };
   }
 
-  // Nombre en sidebar
+  // Nombre en sidebar (texto corto para el sidebar)
   if (config.nombre_comercial) {
-    var partes = config.nombre_comercial.split(' ');
-    var sidebarNombre = document.getElementById('sidebar-nombre-comercial');
-    if (partes.length > 2) {
-      var mitad = Math.ceil(partes.length / 2);
-      sidebarNombre.innerHTML = partes.slice(0, mitad).join(' ') + '<br>' + partes.slice(mitad).join(' ');
-    } else {
-      sidebarNombre.textContent = config.nombre_comercial;
-    }
-  }
-
-  // Mobile header: logo + nombre
-  if (config.logo_url) {
-    var mobileLogo = document.getElementById('mobile-header-logo');
-    mobileLogo.src = config.logo_url;
-    mobileLogo.onload = function() { mobileLogo.style.display = 'inline-block'; };
-    mobileLogo.onerror = function() { mobileLogo.style.display = 'none'; };
-  }
-  if (config.nombre_comercial) {
-    document.getElementById('mobile-header-nombre').textContent = config.nombre_comercial;
+    document.getElementById('sidebar-nombre-comercial').textContent = config.nombre_comercial;
   }
 
   // Print header para PDF
@@ -218,64 +205,128 @@ function aplicarConfigDashboard() {
   }
 }
 
+// Mapa de títulos para cada módulo
+var TITULOS_MODULO = {
+  ordenes: 'Órdenes de Pedido',
+  clientes: 'Clientes',
+  productos: 'Productos',
+  usuarios: 'Gestión de Usuarios',
+  reportes: 'Reportes',
+  configuracion: 'Configuración'
+};
+
+// Cambiar módulo activo (reemplaza cambiarTab)
+function mostrarModulo(nombreModulo) {
+  // 1. Quitar clase 'activo' de todos los nav-item
+  var navItems = document.querySelectorAll('.sidebar-nav .nav-item');
+  for (var i = 0; i < navItems.length; i++) {
+    navItems[i].classList.remove('activo');
+  }
+
+  // 2. Agregar clase 'activo' al nav-item correspondiente
+  var navActivo = document.querySelector('.nav-item[data-modulo="' + nombreModulo + '"]');
+  if (navActivo) navActivo.classList.add('activo');
+
+  // 3. Ocultar todos los módulos
+  var modulos = document.querySelectorAll('.modulo');
+  for (var j = 0; j < modulos.length; j++) {
+    modulos[j].classList.add('oculto');
+  }
+
+  // 4. Mostrar el módulo seleccionado
+  var moduloActivo = document.getElementById('modulo-' + nombreModulo);
+  if (moduloActivo) moduloActivo.classList.remove('oculto');
+
+  // 5. Actualizar título del topbar
+  var titulo = TITULOS_MODULO[nombreModulo] || nombreModulo;
+  document.getElementById('titulo-modulo').textContent = titulo;
+
+  // 6. Mostrar u ocultar botón Nueva Orden (solo en módulo órdenes)
+  var btnNueva = document.getElementById('btn-nueva-orden-topbar');
+  if (btnNueva) {
+    btnNueva.style.display = (nombreModulo === 'ordenes') ? 'flex' : 'none';
+  }
+
+  // 7. Cargar datos según módulo
+  if (nombreModulo === 'ordenes') { cargarOrdenes(); cargarContadores(); }
+  if (nombreModulo === 'clientes') cargarClientes();
+  if (nombreModulo === 'productos') cargarProductos();
+  if (nombreModulo === 'usuarios') cargarUsuarios();
+  if (nombreModulo === 'configuracion') cargarConfiguracion();
+
+  // 8. Cerrar sidebar en mobile al seleccionar módulo
+  cerrarSidebarMobile();
+}
+
+// Compatibilidad: alias para código que aún llame a cambiarTab
 function cambiarTab(tab) {
-  // Ocultar todas las secciones
-  var secciones = document.querySelectorAll('.seccion-tab');
-  for (var i = 0; i < secciones.length; i++) {
-    secciones[i].style.display = 'none';
-  }
-
-  // Quitar clase activa de tabs
-  var tabs = document.querySelectorAll('.tab');
-  for (var j = 0; j < tabs.length; j++) {
-    tabs[j].classList.remove('activa');
-  }
-
-  // Mostrar sección seleccionada
-  document.getElementById('seccion-' + tab).style.display = 'block';
-  var tabBtn = document.querySelector('[data-tab="' + tab + '"]');
-  if (tabBtn) tabBtn.classList.add('activa');
-
-  // Cargar datos según tab
-  if (tab === 'clientes') cargarClientes();
-  if (tab === 'productos') cargarProductos();
-  if (tab === 'usuarios') cargarUsuarios();
-  if (tab === 'configuracion') cargarConfiguracion();
+  mostrarModulo(tab);
 }
 
 // ==================== CONTADORES ====================
 function cargarContadores() {
   google.script.run
     .withSuccessHandler(function(contadores) {
-      document.getElementById('cont-pendiente').textContent = contadores['Pendiente'] || 0;
-      document.getElementById('cont-prestado').textContent = contadores['Prestado'] || 0;
-      document.getElementById('cont-porcobrar').textContent = contadores['Por Cobrar/Devolver'] || 0;
-      document.getElementById('cont-facturado').textContent = contadores['Facturado'] || 0;
-      document.getElementById('cont-regresado').textContent = contadores['Regresado'] || 0;
-
-      // Parpadeo si hay Por Cobrar/Devolver
-      var cardPorCobrar = document.getElementById('card-porcobrar');
-      if (contadores['Por Cobrar/Devolver'] > 0) {
-        cardPorCobrar.classList.add('parpadeante');
-      } else {
-        cardPorCobrar.classList.remove('parpadeante');
-      }
+      actualizarContadores(contadores);
     })
     .obtenerContadores();
 }
 
-function filtrarPorEstado(estado) {
-  if (filtroEstadoActual === estado) {
-    filtroEstadoActual = null; // Quitar filtro si ya estaba activo
+// Actualizar los chips de contadores con los datos del servidor
+function actualizarContadores(contadores) {
+  document.getElementById('count-pendiente').textContent = contadores['Pendiente'] || 0;
+  document.getElementById('count-prestado').textContent = contadores['Prestado'] || 0;
+  document.getElementById('count-cobrar').textContent = contadores['Por Cobrar/Devolver'] || 0;
+  document.getElementById('count-facturado').textContent = contadores['Facturado'] || 0;
+  document.getElementById('count-regresado').textContent = contadores['Regresado'] || 0;
+
+  // Parpadeo si hay Por Cobrar/Devolver
+  var chipCobrar = document.getElementById('chip-cobrar');
+  if ((contadores['Por Cobrar/Devolver'] || 0) > 0) {
+    chipCobrar.classList.add('tiene-alertas');
   } else {
-    filtroEstadoActual = estado;
+    chipCobrar.classList.remove('tiene-alertas');
   }
-  // Sincronizar con el dropdown de filtros si existe
+}
+
+// Filtrar desde los chips de estado (nueva función)
+function filtrarPorEstadoChip(estado) {
+  // Quitar clase 'activo-chip' de todos los chips
+  var chips = document.querySelectorAll('.contador-chip');
+  for (var i = 0; i < chips.length; i++) {
+    chips[i].classList.remove('activo-chip');
+  }
+
+  if (estado === 'Todos') {
+    // Limpiar filtro
+    filtroEstadoActual = null;
+    document.getElementById('chip-todos').classList.add('activo-chip');
+  } else {
+    // Aplicar filtro
+    filtroEstadoActual = estado;
+    // Buscar el chip correspondiente y marcarlo como activo
+    var mapaChips = {
+      'Pendiente': 'chip-pendiente',
+      'Prestado': 'chip-prestado',
+      'Por Cobrar/Devolver': 'chip-cobrar',
+      'Facturado': 'chip-facturado',
+      'Regresado': 'chip-regresado'
+    };
+    var chipId = mapaChips[estado];
+    if (chipId) document.getElementById(chipId).classList.add('activo-chip');
+  }
+
+  // Sincronizar con el dropdown de filtros
   var selectEstado = document.getElementById('filtro-op-estado');
   if (selectEstado) {
     selectEstado.value = filtroEstadoActual || '';
   }
   renderizarOrdenes();
+}
+
+// Función original de filtrado (mantener compatibilidad con dropdown)
+function filtrarPorEstado(estado) {
+  filtrarPorEstadoChip(estado);
 }
 
 // ==================== FILTROS DINÁMICOS DE ÓRDENES ====================
@@ -1757,4 +1808,95 @@ document.addEventListener('click', function(e) {
 document.getElementById('login-password').addEventListener('keypress', function(e) {
   if (e.key === 'Enter') iniciarSesion();
 });
+
+// ==================== SIDEBAR — TOGGLE COLAPSABLE ====================
+
+// Alternar entre sidebar expandido y colapsado
+function toggleSidebar() {
+  var sidebar = document.getElementById('sidebar');
+  var btnIcon = document.querySelector('#btn-colapsar .material-icons');
+
+  if (sidebar.classList.contains('sidebar-colapsado')) {
+    // Expandir
+    sidebar.classList.remove('sidebar-colapsado');
+    sidebar.classList.add('sidebar-expandido');
+    if (btnIcon) btnIcon.textContent = 'menu';
+    localStorage.setItem('sidebar_estado', 'expandido');
+  } else {
+    // Colapsar
+    sidebar.classList.remove('sidebar-expandido');
+    sidebar.classList.add('sidebar-colapsado');
+    if (btnIcon) btnIcon.textContent = 'chevron_right';
+    localStorage.setItem('sidebar_estado', 'colapsado');
+  }
+}
+
+// Restaurar estado del sidebar al cargar la app
+function inicializarSidebar() {
+  var estadoGuardado = localStorage.getItem('sidebar_estado');
+  var sidebar = document.getElementById('sidebar');
+  var btnIcon = document.querySelector('#btn-colapsar .material-icons');
+
+  if (estadoGuardado === 'colapsado') {
+    // Aplicar sin animación al inicio
+    sidebar.style.transition = 'none';
+    sidebar.classList.remove('sidebar-expandido');
+    sidebar.classList.add('sidebar-colapsado');
+    if (btnIcon) btnIcon.textContent = 'chevron_right';
+    // Restaurar transición después de un frame
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        sidebar.style.transition = '';
+      });
+    });
+  }
+}
+
+// ==================== SIDEBAR — MOBILE DRAWER ====================
+
+// Abrir sidebar como drawer en mobile
+function abrirSidebarMobile() {
+  var sidebar = document.getElementById('sidebar');
+  var overlay = document.getElementById('overlay-sidebar');
+  sidebar.classList.add('sidebar-abierto-mobile');
+  overlay.classList.add('activo');
+}
+
+// Cerrar sidebar drawer en mobile
+function cerrarSidebarMobile() {
+  var sidebar = document.getElementById('sidebar');
+  var overlay = document.getElementById('overlay-sidebar');
+  sidebar.classList.remove('sidebar-abierto-mobile');
+  overlay.classList.remove('activo');
+}
+
+// ==================== PERMISOS POR ROL ====================
+
+// Mostrar u ocultar ítems del sidebar según el rol del usuario
+function aplicarPermisosPorRol(rol) {
+  var navProductos = document.getElementById('nav-productos');
+  var navUsuarios = document.getElementById('nav-usuarios');
+  var navReportes = document.getElementById('nav-reportes');
+  var navConfig = document.getElementById('nav-configuracion');
+
+  if (rol === 'Super admin') {
+    // Super admin: acceso total
+    if (navProductos) navProductos.style.display = 'flex';
+    if (navUsuarios) navUsuarios.style.display = 'flex';
+    if (navReportes) navReportes.style.display = 'flex';
+    if (navConfig) navConfig.style.display = 'flex';
+  } else if (rol === 'Auxiliar') {
+    // Auxiliar: productos y reportes
+    if (navProductos) navProductos.style.display = 'flex';
+    if (navUsuarios) navUsuarios.style.display = 'none';
+    if (navReportes) navReportes.style.display = 'flex';
+    if (navConfig) navConfig.style.display = 'none';
+  } else {
+    // Vendedor: solo órdenes y clientes
+    if (navProductos) navProductos.style.display = 'none';
+    if (navUsuarios) navUsuarios.style.display = 'none';
+    if (navReportes) navReportes.style.display = 'none';
+    if (navConfig) navConfig.style.display = 'none';
+  }
+}
 </script>

@@ -45,315 +45,359 @@
   </div>
 
   <!-- ==================== DASHBOARD ==================== -->
-  <div id="pantalla-dashboard" class="dashboard-container" style="display:none;">
+  <div id="pantalla-dashboard" style="display:none;">
+    <div id="app-wrapper">
 
-    <!-- Header mobile: logo + nombre (visible solo en < 768px) -->
-    <div id="mobile-header" class="mobile-header">
-      <img id="mobile-header-logo" src="" alt="Logo" class="mobile-header-logo" style="display:none;">
-      <span id="mobile-header-nombre" class="mobile-header-nombre">Ventas Virtuales Colombia</span>
-    </div>
+      <!-- Overlay oscuro para sidebar en mobile -->
+      <div id="overlay-sidebar" onclick="cerrarSidebarMobile()"></div>
 
-    <!-- Sidebar izquierdo -->
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <img id="sidebar-logo-img" src="" alt="Logo" class="sidebar-logo-img" style="display:none;">
-        <h2 id="sidebar-nombre-comercial">Ventas Virtuales<br>Colombia</h2>
-        <p>Órdenes de Pedido</p>
-      </div>
-      <div class="sidebar-cards">
-        <div class="card-estado card-pendiente" onclick="filtrarPorEstado('Pendiente')">
-          <span class="card-numero" id="cont-pendiente">0</span>
-          <span class="card-label">Pendiente</span>
-        </div>
-        <div class="card-estado card-prestado" onclick="filtrarPorEstado('Prestado')">
-          <span class="card-numero" id="cont-prestado">0</span>
-          <span class="card-label">Prestado</span>
-        </div>
-        <div class="card-estado card-porcobrar" id="card-porcobrar" onclick="filtrarPorEstado('Por Cobrar/Devolver')">
-          <span class="card-numero" id="cont-porcobrar">0</span>
-          <span class="card-label">Por Cobrar/Devolver</span>
-        </div>
-        <div class="card-estado card-facturado" onclick="filtrarPorEstado('Facturado')">
-          <span class="card-numero" id="cont-facturado">0</span>
-          <span class="card-label">Facturado</span>
-        </div>
-        <div class="card-estado card-regresado" onclick="filtrarPorEstado('Regresado')">
-          <span class="card-numero" id="cont-regresado">0</span>
-          <span class="card-label">Regresado</span>
-        </div>
-      </div>
-      <div class="sidebar-footer">
-        <button class="btn-cerrar-sesion" onclick="cerrarSesion()">
-          <span class="material-icons">logout</span> Cerrar sesión
-        </button>
-        <p id="usuario-nombre" class="usuario-info"></p>
-      </div>
-    </aside>
+      <!-- Botón hamburger para mobile -->
+      <button id="btn-menu-mobile" onclick="abrirSidebarMobile()">
+        <span class="material-icons">menu</span>
+      </button>
 
-    <!-- Contenido principal -->
-    <main class="contenido-principal">
-      <!-- Navbar superior con tabs -->
-      <nav class="navbar-tabs">
-        <div class="tabs">
-          <button class="tab activa" data-tab="ordenes" onclick="cambiarTab('ordenes')">Órdenes de Pedido</button>
-          <button class="tab" data-tab="clientes" onclick="cambiarTab('clientes')">Clientes</button>
-          <button class="tab" data-tab="productos" id="tab-productos" style="display:none;" onclick="cambiarTab('productos')">Productos</button>
-          <button class="tab" data-tab="usuarios" id="tab-usuarios" style="display:none;" onclick="cambiarTab('usuarios')">Usuarios</button>
-          <button class="tab" data-tab="reportes" id="tab-reportes" style="display:none;" onclick="cambiarTab('reportes')">Reportes</button>
-          <button class="tab" data-tab="configuracion" id="tab-configuracion" style="display:none;" onclick="cambiarTab('configuracion')">
-            <span class="material-icons" style="font-size:16px; vertical-align:middle;">settings</span> Configuración
-          </button>
-        </div>
-        <button class="btn-nueva-orden" onclick="abrirModalNuevaOrden()">
-          <span class="material-icons">add</span> Nueva Orden
-        </button>
-      </nav>
-
-      <!-- Tab: Órdenes -->
-      <section id="seccion-ordenes" class="seccion-tab">
-        <!-- Barra de filtros dinámicos -->
-        <div class="filtros-ordenes">
-          <div class="filtros-ordenes-grid">
-            <div class="campo-filtro">
-              <label>N° OP</label>
-              <input type="text" id="filtro-op-numero" placeholder="Ej: OP-2025" oninput="aplicarFiltrosOrdenes()">
-            </div>
-            <div class="campo-filtro">
-              <label>Cliente / Local</label>
-              <input type="text" id="filtro-op-cliente" placeholder="Buscar cliente..." oninput="aplicarFiltrosOrdenes()">
-            </div>
-            <div class="campo-filtro">
-              <label>Estado</label>
-              <select id="filtro-op-estado" onchange="aplicarFiltrosOrdenes()">
-                <option value="">Todos</option>
-                <option value="Pendiente">Pendiente</option>
-                <option value="Prestado">Prestado</option>
-                <option value="Por Cobrar/Devolver">Por Cobrar/Devolver</option>
-                <option value="Facturado">Facturado</option>
-                <option value="Regresado">Regresado</option>
-              </select>
-            </div>
-            <div class="campo-filtro">
-              <label>Fecha desde</label>
-              <input type="date" id="filtro-op-fecha-desde" onchange="aplicarFiltrosOrdenes()">
-            </div>
-            <div class="campo-filtro">
-              <label>Fecha hasta</label>
-              <input type="date" id="filtro-op-fecha-hasta" onchange="aplicarFiltrosOrdenes()">
-            </div>
-            <div class="campo-filtro campo-filtro-btn">
-              <button class="btn-limpiar-filtros" onclick="limpiarFiltrosOrdenes()">
-                <span class="material-icons" style="font-size:16px;">filter_alt_off</span> Limpiar
-              </button>
-            </div>
+      <!-- SIDEBAR IZQUIERDO COLAPSABLE -->
+      <aside id="sidebar" class="sidebar-expandido">
+        <!-- Header del sidebar: logo + botón colapsar -->
+        <div class="sidebar-header">
+          <div class="sidebar-logo">
+            <img id="sidebar-logo-img" src="" alt="VVC" class="logo-img" style="display:none;">
+            <span class="sidebar-titulo" id="sidebar-nombre-comercial">Ventas Virtuales</span>
           </div>
-          <p id="conteo-ordenes" class="conteo-ordenes"></p>
-        </div>
-
-        <div id="tabla-ordenes-container">
-          <table class="tabla-principal" id="tabla-ordenes">
-            <thead>
-              <tr>
-                <th>N° OP</th>
-                <th>Fecha</th>
-                <th>Cliente</th>
-                <th>Vendedor / Receptor</th>
-                <th>Valor</th>
-                <th>Hora</th>
-                <th>Estado</th>
-                <th>Acción</th>
-              </tr>
-            </thead>
-            <tbody id="tbody-ordenes">
-              <tr><td colspan="8" class="sin-datos">Cargando órdenes...</td></tr>
-            </tbody>
-          </table>
-          <!-- Cards mobile: se muestran solo en < 768px -->
-          <div id="cards-ordenes-mobile" class="cards-mobile"></div>
-        </div>
-      </section>
-
-      <!-- Tab: Clientes -->
-      <section id="seccion-clientes" class="seccion-tab" style="display:none;">
-        <div class="seccion-header">
-          <input type="text" id="buscar-cliente" placeholder="Buscar cliente..." class="input-busqueda" oninput="buscarClientes()">
-          <button class="btn-nueva-orden" onclick="abrirModalNuevoCliente()">
-            <span class="material-icons">add</span> Nuevo Cliente
+          <button id="btn-colapsar" onclick="toggleSidebar()" title="Colapsar menú">
+            <span class="material-icons">menu</span>
           </button>
         </div>
-        <table class="tabla-principal" id="tabla-clientes">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Nombre Local</th>
-              <th>Contacto</th>
-              <th>Teléfono</th>
-              <th>Ciudad</th>
-            </tr>
-          </thead>
-          <tbody id="tbody-clientes">
-            <tr><td colspan="5" class="sin-datos">Cargando clientes...</td></tr>
-          </tbody>
-        </table>
-      </section>
 
-      <!-- Tab: Productos (Super admin y Auxiliar) -->
-      <section id="seccion-productos" class="seccion-tab" style="display:none;">
-        <div class="seccion-header">
-          <input type="text" id="buscar-producto" placeholder="Buscar por nombre o categoría..." class="input-busqueda" oninput="buscarProductos()">
-          <button class="btn-nueva-orden" onclick="abrirModalNuevoProducto()">
-            <span class="material-icons">add</span> Nuevo Producto
-          </button>
-        </div>
-        <table class="tabla-principal" id="tabla-productos">
-          <thead>
-            <tr>
-              <th>Nombre</th>
-              <th>Categoría</th>
-              <th>Descripción</th>
-              <th>Precio ref.</th>
-              <th>Activo</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody id="tbody-productos">
-            <tr><td colspan="6" class="sin-datos">Cargando productos...</td></tr>
-          </tbody>
-        </table>
-      </section>
-
-      <!-- Tab: Usuarios (solo Super admin) -->
-      <section id="seccion-usuarios" class="seccion-tab" style="display:none;">
-        <div class="seccion-header">
-          <h3>Gestión de Usuarios</h3>
-          <button class="btn-nueva-orden" onclick="abrirModalNuevoUsuario()">
-            <span class="material-icons">add</span> Nuevo Usuario
-          </button>
-        </div>
-        <table class="tabla-principal" id="tabla-usuarios">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Nombre</th>
-              <th>Email</th>
-              <th>Rol</th>
-              <th>Local</th>
-              <th>Activo</th>
-            </tr>
-          </thead>
-          <tbody id="tbody-usuarios">
-            <tr><td colspan="6" class="sin-datos">Cargando usuarios...</td></tr>
-          </tbody>
-        </table>
-      </section>
-
-      <!-- Tab: Reportes (Super admin y Auxiliar) -->
-      <section id="seccion-reportes" class="seccion-tab" style="display:none;">
-        <div class="reportes-filtros">
-          <h3>Generar Reporte Excel</h3>
-          <div class="filtros-grid">
-            <div class="campo-form">
-              <label>Fecha inicio</label>
-              <input type="date" id="filtro-fecha-inicio">
-            </div>
-            <div class="campo-form">
-              <label>Fecha fin</label>
-              <input type="date" id="filtro-fecha-fin">
-            </div>
-            <div class="campo-form">
-              <label>Estado</label>
-              <select id="filtro-estado-reporte">
-                <option value="">Todos</option>
-                <option value="Pendiente">Pendiente</option>
-                <option value="Prestado">Prestado</option>
-                <option value="Por Cobrar/Devolver">Por Cobrar/Devolver</option>
-                <option value="Facturado">Facturado</option>
-                <option value="Regresado">Regresado</option>
-              </select>
-            </div>
-            <div class="campo-form">
-              <label>Vendedor</label>
-              <select id="filtro-vendedor">
-                <option value="">Todos</option>
-              </select>
-            </div>
-            <div class="campo-form">
-              <label>Cliente / Local</label>
-              <input type="text" id="filtro-cliente-reporte" placeholder="Buscar cliente...">
-            </div>
-          </div>
-          <div class="reportes-botones">
-            <button class="btn-nueva-orden" onclick="filtrarReporte()">
-              <span class="material-icons">search</span> Filtrar
-            </button>
-            <button class="btn-limpiar-filtros" onclick="limpiarFiltrosReporte()">
-              <span class="material-icons" style="font-size:16px;">filter_alt_off</span> Limpiar
-            </button>
-            <button class="btn-nueva-orden" onclick="descargarExcel()">
-              <span class="material-icons">download</span> Descargar Excel
-            </button>
+        <!-- Info del usuario logueado -->
+        <div class="sidebar-usuario">
+          <div class="avatar-circulo" id="sidebar-avatar">VV</div>
+          <div class="sidebar-usuario-info">
+            <span class="usuario-nombre" id="sidebar-usuario-nombre"></span>
+            <span class="usuario-rol" id="sidebar-usuario-rol"></span>
           </div>
         </div>
-        <div id="preview-reporte">
-          <p id="conteo-reporte" class="conteo-registros"></p>
-          <div style="overflow-x:auto;">
-            <table class="tabla-principal" id="tabla-reporte">
+
+        <!-- Navegación principal -->
+        <nav class="sidebar-nav">
+          <a class="nav-item activo" onclick="mostrarModulo('ordenes')" data-modulo="ordenes" title="Órdenes de Pedido">
+            <span class="nav-icono material-icons">receipt_long</span>
+            <span class="nav-texto">Órdenes de Pedido</span>
+          </a>
+          <a class="nav-item" onclick="mostrarModulo('clientes')" data-modulo="clientes" title="Clientes">
+            <span class="nav-icono material-icons">groups</span>
+            <span class="nav-texto">Clientes</span>
+          </a>
+          <a class="nav-item" onclick="mostrarModulo('productos')" data-modulo="productos" title="Productos" id="nav-productos" style="display:none;">
+            <span class="nav-icono material-icons">inventory_2</span>
+            <span class="nav-texto">Productos</span>
+          </a>
+          <a class="nav-item" onclick="mostrarModulo('usuarios')" data-modulo="usuarios" title="Usuarios" id="nav-usuarios" style="display:none;">
+            <span class="nav-icono material-icons">person</span>
+            <span class="nav-texto">Usuarios</span>
+          </a>
+          <a class="nav-item" onclick="mostrarModulo('reportes')" data-modulo="reportes" title="Reportes" id="nav-reportes" style="display:none;">
+            <span class="nav-icono material-icons">assessment</span>
+            <span class="nav-texto">Reportes</span>
+          </a>
+          <a class="nav-item" onclick="mostrarModulo('configuracion')" data-modulo="configuracion" title="Configuración" id="nav-configuracion" style="display:none;">
+            <span class="nav-icono material-icons">settings</span>
+            <span class="nav-texto">Configuración</span>
+          </a>
+        </nav>
+
+        <!-- Pie del sidebar: cerrar sesión -->
+        <div class="sidebar-footer">
+          <a class="nav-item nav-logout" onclick="cerrarSesion()" title="Cerrar sesión">
+            <span class="nav-icono material-icons">logout</span>
+            <span class="nav-texto">Cerrar sesión</span>
+          </a>
+        </div>
+      </aside>
+
+      <!-- ÁREA DE CONTENIDO PRINCIPAL -->
+      <main id="contenido-principal">
+        <!-- HEADER TOP BAR del contenido -->
+        <div class="topbar">
+          <h2 class="topbar-titulo" id="titulo-modulo">Órdenes de Pedido</h2>
+          <button class="btn-nueva-orden" onclick="abrirModalNuevaOrden()" id="btn-nueva-orden-topbar">
+            <span class="material-icons">add</span> Nueva Orden
+          </button>
+        </div>
+
+        <!-- MÓDULO: ÓRDENES DE PEDIDO -->
+        <div id="modulo-ordenes" class="modulo">
+          <!-- CONTADORES DE ESTADO (chips horizontales) -->
+          <div class="contadores-estado-barra">
+            <div class="contador-chip naranja" onclick="filtrarPorEstadoChip('Pendiente')" id="chip-pendiente">
+              <span class="chip-numero" id="count-pendiente">0</span>
+              <span class="chip-label">Pendiente</span>
+            </div>
+            <div class="contador-chip verde" onclick="filtrarPorEstadoChip('Prestado')" id="chip-prestado">
+              <span class="chip-numero" id="count-prestado">0</span>
+              <span class="chip-label">Prestado</span>
+            </div>
+            <div class="contador-chip rojo" onclick="filtrarPorEstadoChip('Por Cobrar/Devolver')" id="chip-cobrar">
+              <span class="chip-numero" id="count-cobrar">0</span>
+              <span class="chip-label">Por Cobrar/Dev.</span>
+            </div>
+            <div class="contador-chip azul" onclick="filtrarPorEstadoChip('Facturado')" id="chip-facturado">
+              <span class="chip-numero" id="count-facturado">0</span>
+              <span class="chip-label">Facturado</span>
+            </div>
+            <div class="contador-chip gris" onclick="filtrarPorEstadoChip('Regresado')" id="chip-regresado">
+              <span class="chip-numero" id="count-regresado">0</span>
+              <span class="chip-label">Regresado</span>
+            </div>
+            <div class="contador-chip todos activo-chip" onclick="filtrarPorEstadoChip('Todos')" id="chip-todos">
+              <span class="chip-label">Ver todos</span>
+            </div>
+          </div>
+
+          <!-- Barra de filtros dinámicos -->
+          <div class="filtros-ordenes">
+            <div class="filtros-ordenes-grid">
+              <div class="campo-filtro">
+                <label>N° OP</label>
+                <input type="text" id="filtro-op-numero" placeholder="Ej: OP-2025" oninput="aplicarFiltrosOrdenes()">
+              </div>
+              <div class="campo-filtro">
+                <label>Cliente / Local</label>
+                <input type="text" id="filtro-op-cliente" placeholder="Buscar cliente..." oninput="aplicarFiltrosOrdenes()">
+              </div>
+              <div class="campo-filtro">
+                <label>Estado</label>
+                <select id="filtro-op-estado" onchange="aplicarFiltrosOrdenes()">
+                  <option value="">Todos</option>
+                  <option value="Pendiente">Pendiente</option>
+                  <option value="Prestado">Prestado</option>
+                  <option value="Por Cobrar/Devolver">Por Cobrar/Devolver</option>
+                  <option value="Facturado">Facturado</option>
+                  <option value="Regresado">Regresado</option>
+                </select>
+              </div>
+              <div class="campo-filtro">
+                <label>Fecha desde</label>
+                <input type="date" id="filtro-op-fecha-desde" onchange="aplicarFiltrosOrdenes()">
+              </div>
+              <div class="campo-filtro">
+                <label>Fecha hasta</label>
+                <input type="date" id="filtro-op-fecha-hasta" onchange="aplicarFiltrosOrdenes()">
+              </div>
+              <div class="campo-filtro campo-filtro-btn">
+                <button class="btn-limpiar-filtros" onclick="limpiarFiltrosOrdenes()">
+                  <span class="material-icons" style="font-size:16px;">filter_alt_off</span> Limpiar
+                </button>
+              </div>
+            </div>
+            <p id="conteo-ordenes" class="conteo-ordenes"></p>
+          </div>
+
+          <div id="tabla-ordenes-container">
+            <table class="tabla-principal" id="tabla-ordenes">
               <thead>
                 <tr>
                   <th>N° OP</th>
                   <th>Fecha</th>
                   <th>Cliente</th>
-                  <th>Local origen</th>
-                  <th>Vendedor</th>
-                  <th>Recibe</th>
-                  <th>Valor total</th>
+                  <th>Vendedor / Receptor</th>
+                  <th>Valor</th>
                   <th>Hora</th>
-                  <th>Fecha límite</th>
                   <th>Estado</th>
-                  <th>Observaciones</th>
+                  <th>Acción</th>
                 </tr>
               </thead>
-              <tbody id="tbody-reporte">
-                <tr><td colspan="11" class="sin-datos">Haga clic en "Filtrar" para previsualizar órdenes</td></tr>
+              <tbody id="tbody-ordenes">
+                <tr><td colspan="8" class="sin-datos">Cargando órdenes...</td></tr>
               </tbody>
             </table>
+            <!-- Cards mobile: se muestran solo en < 768px -->
+            <div id="cards-ordenes-mobile" class="cards-mobile"></div>
           </div>
         </div>
-      </section>
 
-      <!-- Tab: Configuración (solo Super admin) -->
-      <section id="seccion-configuracion" class="seccion-tab" style="display:none;">
-        <div class="seccion-header">
-          <h3><span class="material-icons" style="vertical-align:middle; margin-right:6px;">settings</span>Configuración del Negocio</h3>
-        </div>
-        <div class="config-tabla-container">
-          <table class="tabla-principal" id="tabla-configuracion">
+        <!-- MÓDULO: CLIENTES -->
+        <div id="modulo-clientes" class="modulo oculto">
+          <div class="seccion-header">
+            <input type="text" id="buscar-cliente" placeholder="Buscar cliente..." class="input-busqueda" oninput="buscarClientes()">
+            <button class="btn-nueva-orden" onclick="abrirModalNuevoCliente()">
+              <span class="material-icons">add</span> Nuevo Cliente
+            </button>
+          </div>
+          <table class="tabla-principal" id="tabla-clientes">
             <thead>
               <tr>
-                <th>Parámetro</th>
-                <th>Valor</th>
-                <th>Descripción</th>
-                <th>Preview</th>
+                <th>ID</th>
+                <th>Nombre Local</th>
+                <th>Contacto</th>
+                <th>Teléfono</th>
+                <th>Ciudad</th>
               </tr>
             </thead>
-            <tbody id="tbody-configuracion">
-              <tr><td colspan="4" class="sin-datos">Cargando configuración...</td></tr>
+            <tbody id="tbody-clientes">
+              <tr><td colspan="5" class="sin-datos">Cargando clientes...</td></tr>
             </tbody>
           </table>
-          <div class="config-acciones">
-            <button class="btn-principal" id="btn-guardar-config" onclick="guardarConfiguracion()" style="width:auto; padding:12px 28px;">
-              <span class="material-icons" style="font-size:16px; vertical-align:middle;">save</span> Guardar cambios
+        </div>
+
+        <!-- MÓDULO: PRODUCTOS (Super admin y Auxiliar) -->
+        <div id="modulo-productos" class="modulo oculto">
+          <div class="seccion-header">
+            <input type="text" id="buscar-producto" placeholder="Buscar por nombre o categoría..." class="input-busqueda" oninput="buscarProductos()">
+            <button class="btn-nueva-orden" onclick="abrirModalNuevoProducto()">
+              <span class="material-icons">add</span> Nuevo Producto
             </button>
-            <span id="config-mensaje" class="config-mensaje" style="display:none;"></span>
+          </div>
+          <table class="tabla-principal" id="tabla-productos">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Categoría</th>
+                <th>Descripción</th>
+                <th>Precio ref.</th>
+                <th>Activo</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-productos">
+              <tr><td colspan="6" class="sin-datos">Cargando productos...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- MÓDULO: USUARIOS (solo Super admin) -->
+        <div id="modulo-usuarios" class="modulo oculto">
+          <div class="seccion-header">
+            <h3>Gestión de Usuarios</h3>
+            <button class="btn-nueva-orden" onclick="abrirModalNuevoUsuario()">
+              <span class="material-icons">add</span> Nuevo Usuario
+            </button>
+          </div>
+          <table class="tabla-principal" id="tabla-usuarios">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Email</th>
+                <th>Rol</th>
+                <th>Local</th>
+                <th>Activo</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-usuarios">
+              <tr><td colspan="6" class="sin-datos">Cargando usuarios...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- MÓDULO: REPORTES (Super admin y Auxiliar) -->
+        <div id="modulo-reportes" class="modulo oculto">
+          <div class="reportes-filtros">
+            <h3>Generar Reporte Excel</h3>
+            <div class="filtros-grid">
+              <div class="campo-form">
+                <label>Fecha inicio</label>
+                <input type="date" id="filtro-fecha-inicio">
+              </div>
+              <div class="campo-form">
+                <label>Fecha fin</label>
+                <input type="date" id="filtro-fecha-fin">
+              </div>
+              <div class="campo-form">
+                <label>Estado</label>
+                <select id="filtro-estado-reporte">
+                  <option value="">Todos</option>
+                  <option value="Pendiente">Pendiente</option>
+                  <option value="Prestado">Prestado</option>
+                  <option value="Por Cobrar/Devolver">Por Cobrar/Devolver</option>
+                  <option value="Facturado">Facturado</option>
+                  <option value="Regresado">Regresado</option>
+                </select>
+              </div>
+              <div class="campo-form">
+                <label>Vendedor</label>
+                <select id="filtro-vendedor">
+                  <option value="">Todos</option>
+                </select>
+              </div>
+              <div class="campo-form">
+                <label>Cliente / Local</label>
+                <input type="text" id="filtro-cliente-reporte" placeholder="Buscar cliente...">
+              </div>
+            </div>
+            <div class="reportes-botones">
+              <button class="btn-nueva-orden" onclick="filtrarReporte()">
+                <span class="material-icons">search</span> Filtrar
+              </button>
+              <button class="btn-limpiar-filtros" onclick="limpiarFiltrosReporte()">
+                <span class="material-icons" style="font-size:16px;">filter_alt_off</span> Limpiar
+              </button>
+              <button class="btn-nueva-orden" onclick="descargarExcel()">
+                <span class="material-icons">download</span> Descargar Excel
+              </button>
+            </div>
+          </div>
+          <div id="preview-reporte">
+            <p id="conteo-reporte" class="conteo-registros"></p>
+            <div style="overflow-x:auto;">
+              <table class="tabla-principal" id="tabla-reporte">
+                <thead>
+                  <tr>
+                    <th>N° OP</th>
+                    <th>Fecha</th>
+                    <th>Cliente</th>
+                    <th>Local origen</th>
+                    <th>Vendedor</th>
+                    <th>Recibe</th>
+                    <th>Valor total</th>
+                    <th>Hora</th>
+                    <th>Fecha límite</th>
+                    <th>Estado</th>
+                    <th>Observaciones</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-reporte">
+                  <tr><td colspan="11" class="sin-datos">Haga clic en "Filtrar" para previsualizar órdenes</td></tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
-      </section>
-    </main>
 
-    <!-- FAB: botón flotante para Nueva Orden (visible solo en móvil) -->
-    <button class="fab-nueva-orden" onclick="abrirModalNuevaOrden()" aria-label="Nueva Orden">
-      <span class="material-icons">add</span>
-    </button>
+        <!-- MÓDULO: CONFIGURACIÓN (solo Super admin) -->
+        <div id="modulo-configuracion" class="modulo oculto">
+          <div class="seccion-header">
+            <h3><span class="material-icons" style="vertical-align:middle; margin-right:6px;">settings</span>Configuración del Negocio</h3>
+          </div>
+          <div class="config-tabla-container">
+            <table class="tabla-principal" id="tabla-configuracion">
+              <thead>
+                <tr>
+                  <th>Parámetro</th>
+                  <th>Valor</th>
+                  <th>Descripción</th>
+                  <th>Preview</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-configuracion">
+                <tr><td colspan="4" class="sin-datos">Cargando configuración...</td></tr>
+              </tbody>
+            </table>
+            <div class="config-acciones">
+              <button class="btn-principal" id="btn-guardar-config" onclick="guardarConfiguracion()" style="width:auto; padding:12px 28px;">
+                <span class="material-icons" style="font-size:16px; vertical-align:middle;">save</span> Guardar cambios
+              </button>
+              <span id="config-mensaje" class="config-mensaje" style="display:none;"></span>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <!-- FAB: botón flotante para Nueva Orden (visible solo en móvil) -->
+      <button class="fab-nueva-orden" onclick="abrirModalNuevaOrden()" aria-label="Nueva Orden">
+        <span class="material-icons">add</span>
+      </button>
+    </div>
   </div>
 
   <!-- ==================== MODAL: Nueva Orden ==================== -->

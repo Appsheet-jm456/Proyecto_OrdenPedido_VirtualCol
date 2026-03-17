@@ -161,198 +161,369 @@ body {
   line-height: 1.5;
 }
 
+/* ==================== VARIABLES SIDEBAR ==================== */
+:root {
+  --sidebar-expandido: 240px;
+  --sidebar-colapsado: 64px;
+  --color-sidebar-bg: #1a1a2e;
+  --color-sidebar-hover: #16213e;
+  --color-sidebar-activo: #ffcf22;
+  --color-sidebar-texto: #e0e0e0;
+  --color-sidebar-texto-activo: #1a1a1a;
+  --transicion-sidebar: all 0.25s ease;
+}
+
 /* ==================== DASHBOARD LAYOUT ==================== */
-.dashboard-container {
+#app-wrapper {
   display: flex;
-  min-height: 100vh;
-}
-
-/* Sidebar */
-.sidebar {
-  width: 160px;
-  background: #fff;
-  border-right: 1px solid #e8e8e8;
-  display: flex;
-  flex-direction: column;
-  padding: 20px 12px;
-  position: fixed;
   height: 100vh;
-  overflow-y: auto;
-  z-index: 200;
+  overflow: hidden;
 }
 
-/* Logo en sidebar */
-.sidebar-logo-img {
-  max-width: 110px;
-  display: block;
-  margin: 0 auto 8px;
-}
-
-.sidebar-header h2 {
-  font-size: 13px;
-  font-weight: 700;
-  color: #1a1a1a;
-  line-height: 1.3;
-  text-align: center;
-}
-
-.sidebar-header p {
-  font-size: 12px;
-  color: #888;
-  margin-top: 4px;
-  margin-bottom: 24px;
-  text-align: center;
-}
-
-/* Header mobile (oculto por defecto, visible en < 768px) */
-.mobile-header {
-  display: none;
-}
-
-.mobile-header-logo {
-  max-height: 36px;
-  vertical-align: middle;
-  margin-right: 8px;
-}
-
-.mobile-header-nombre {
-  font-size: 14px;
-  font-weight: 700;
-  color: #1a1a1a;
-  vertical-align: middle;
-}
-
-.sidebar-cards {
+/* ==================== SIDEBAR BASE ==================== */
+#sidebar {
+  width: var(--sidebar-expandido);
+  background: var(--color-sidebar-bg);
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  flex: 1;
+  transition: var(--transicion-sidebar);
+  overflow: hidden;
+  flex-shrink: 0;
+  z-index: 100;
 }
 
-.card-estado {
-  padding: 14px 12px;
-  border-radius: 10px;
+/* Sidebar colapsado */
+#sidebar.sidebar-colapsado {
+  width: var(--sidebar-colapsado);
+}
+
+/* Ocultar textos al colapsar */
+#sidebar.sidebar-colapsado .nav-texto,
+#sidebar.sidebar-colapsado .sidebar-titulo,
+#sidebar.sidebar-colapsado .sidebar-usuario-info {
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* ==================== HEADER DEL SIDEBAR ==================== */
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.logo-img {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.sidebar-titulo {
+  color: #ffcf22;
+  font-weight: 700;
+  font-size: 14px;
+  transition: var(--transicion-sidebar);
+  white-space: nowrap;
+}
+
+#btn-colapsar {
+  background: none;
+  border: none;
+  color: var(--color-sidebar-texto);
+  font-size: 18px;
   cursor: pointer;
-  transition: transform 0.15s, box-shadow 0.15s;
+  padding: 4px 8px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+#btn-colapsar:hover {
+  background: rgba(255,255,255,0.1);
+}
+
+#btn-colapsar .material-icons {
+  font-size: 20px;
+}
+
+/* ==================== INFO USUARIO SIDEBAR ==================== */
+.sidebar-usuario {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.avatar-circulo {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #ffcf22;
+  color: #1a1a1a;
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sidebar-usuario-info {
+  transition: var(--transicion-sidebar);
+  overflow: hidden;
+}
+
+.usuario-nombre {
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  display: block;
+  white-space: nowrap;
+}
+
+.usuario-rol {
+  color: #ffcf22;
+  font-size: 11px;
+  display: block;
+  white-space: nowrap;
+}
+
+/* ==================== ITEMS DE NAVEGACIÓN ==================== */
+.sidebar-nav {
+  flex: 1;
+  padding: 8px 0;
+  overflow-y: auto;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  color: var(--color-sidebar-texto);
+  cursor: pointer;
+  transition: var(--transicion-sidebar);
+  text-decoration: none;
+  white-space: nowrap;
+  border-left: 3px solid transparent;
+}
+
+.nav-item:hover {
+  background: var(--color-sidebar-hover);
+  color: white;
+}
+
+.nav-item.activo {
+  background: rgba(255, 207, 34, 0.15);
+  color: #ffcf22;
+  border-left: 3px solid #ffcf22;
+  font-weight: 600;
+}
+
+.nav-icono {
+  font-size: 20px;
+  flex-shrink: 0;
+  width: 24px;
   text-align: center;
 }
 
-.card-estado:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+.nav-texto {
+  font-size: 14px;
+  transition: var(--transicion-sidebar);
 }
 
-.card-numero {
-  display: block;
-  font-size: 28px;
+/* Tooltip al colapsar (muestra el título al hover) */
+#sidebar.sidebar-colapsado .nav-item {
+  position: relative;
+  justify-content: center;
+  padding: 14px;
+  border-left: 3px solid transparent;
+}
+
+#sidebar.sidebar-colapsado .nav-item.activo {
+  border-left: 3px solid #ffcf22;
+}
+
+#sidebar.sidebar-colapsado .nav-item:hover::after {
+  content: attr(title);
+  position: absolute;
+  left: calc(var(--sidebar-colapsado) + 8px);
+  background: #333;
+  color: white;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  white-space: nowrap;
+  z-index: 999;
+  pointer-events: none;
+}
+
+/* ==================== FOOTER SIDEBAR ==================== */
+.sidebar-footer {
+  border-top: 1px solid rgba(255,255,255,0.1);
+  padding: 8px 0;
+}
+
+.nav-logout {
+  color: #ff6b6b !important;
+}
+
+.nav-logout:hover {
+  background: rgba(255,107,107,0.1) !important;
+}
+
+/* ==================== CONTENIDO PRINCIPAL ==================== */
+#contenido-principal {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #f5f5f5;
+}
+
+/* ==================== TOP BAR ==================== */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: white;
+  border-bottom: 1px solid #e0e0e0;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  flex-shrink: 0;
+}
+
+.topbar-titulo {
+  font-size: 20px;
   font-weight: 700;
-  color: #fff;
+  color: #1a1a1a;
+  margin: 0;
 }
 
-.card-label {
-  display: block;
+/* ==================== CONTADORES CHIPS ==================== */
+.contadores-estado-barra {
+  display: flex;
+  gap: 12px;
+  padding: 16px 24px 8px;
+  flex-wrap: wrap;
+}
+
+.contador-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 20px;
+  border-radius: 12px;
+  cursor: pointer;
+  min-width: 90px;
+  transition: transform 0.15s, box-shadow 0.15s;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+}
+
+.contador-chip:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+}
+
+.chip-numero {
+  font-size: 24px;
+  font-weight: 800;
+  color: white;
+  line-height: 1;
+}
+
+.chip-label {
   font-size: 11px;
-  font-weight: 600;
   color: rgba(255,255,255,0.9);
   margin-top: 4px;
+  text-align: center;
+  font-weight: 500;
 }
 
-.card-pendiente { background: #ff9800; }
-.card-prestado { background: #4caf50; }
-.card-porcobrar { background: #f44336; }
-.card-facturado { background: #2196f3; }
-.card-regresado { background: #9e9e9e; }
+.contador-chip.naranja { background: #ff9800; }
+.contador-chip.verde { background: #4caf50; }
+.contador-chip.rojo { background: #f44336; }
+.contador-chip.azul { background: #2196f3; }
+.contador-chip.gris { background: #9e9e9e; }
+.contador-chip.todos { background: #607d8b; }
+
+/* Chip activo (filtro seleccionado) */
+.contador-chip.activo-chip {
+  outline: 3px solid white;
+  outline-offset: -3px;
+  transform: scale(1.05);
+}
 
 /* Animación parpadeo para Por Cobrar/Devolver */
-@keyframes pulse-red {
+@keyframes pulso-rojo {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
 }
 
-.card-porcobrar.parpadeante {
-  animation: pulse-red 1.5s infinite;
+.contador-chip.tiene-alertas {
+  animation: pulso-rojo 1.2s ease-in-out infinite;
 }
 
-.sidebar-footer {
-  margin-top: auto;
-  padding-top: 16px;
-  border-top: 1px solid #eee;
-}
-
-.btn-cerrar-sesion {
+/* ==================== MÓDULOS ==================== */
+.modulo {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  background: none;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 8px 12px;
-  cursor: pointer;
-  font-size: 13px;
-  color: #666;
-  width: 100%;
-  justify-content: center;
-  font-family: 'Inter', sans-serif;
-}
-
-.btn-cerrar-sesion:hover {
-  background: #f5f5f5;
-}
-
-.usuario-info {
-  font-size: 11px;
-  color: #999;
-  text-align: center;
-  margin-top: 8px;
-}
-
-/* Contenido principal */
-.contenido-principal {
-  margin-left: 160px;
+  flex-direction: column;
   flex: 1;
-  padding: 0;
+  overflow-y: auto;
+  padding: 24px;
 }
 
-/* Navbar tabs */
-.navbar-tabs {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 24px;
-  background: #fff;
-  border-bottom: 1px solid #e8e8e8;
-  position: sticky;
-  top: 0;
-  z-index: 100;
+.modulo.oculto {
+  display: none;
 }
 
-.tabs {
-  display: flex;
-  gap: 4px;
+/* ==================== OVERLAY Y MENÚ MOBILE ==================== */
+#overlay-sidebar {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 199;
 }
 
-.tab {
-  padding: 8px 18px;
-  border: none;
-  background: none;
-  font-size: 14px;
-  font-weight: 500;
-  color: #888;
-  cursor: pointer;
-  border-radius: 8px;
-  transition: all 0.2s;
-  font-family: 'Inter', sans-serif;
+#overlay-sidebar.activo {
+  display: block;
 }
 
-.tab:hover {
-  background: #f5f5f5;
-  color: #555;
-}
-
-.tab.activa {
+#btn-menu-mobile {
+  display: none;
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 201;
   background: #ffcf22;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+#btn-menu-mobile .material-icons {
+  font-size: 22px;
   color: #1a1a1a;
-  font-weight: 600;
 }
 
 .btn-nueva-orden {
@@ -373,11 +544,6 @@ body {
 
 .btn-nueva-orden:hover {
   background: #f0c000;
-}
-
-/* Secciones tab */
-.seccion-tab {
-  padding: 24px;
 }
 
 .seccion-header {
@@ -446,7 +612,7 @@ body {
 
 .badge-pendiente { background: #ff9800; }
 .badge-prestado { background: #4caf50; }
-.badge-porcobrar { background: #f44336; animation: pulse-red 1.5s infinite; }
+.badge-porcobrar { background: #f44336; animation: pulso-rojo 1.2s ease-in-out infinite; }
 .badge-facturado { background: #2196f3; }
 .badge-regresado { background: #9e9e9e; }
 
@@ -1007,12 +1173,13 @@ body {
 
 /* ==================== IMPRESIÓN PDF ==================== */
 @media print {
-  .sidebar, .navbar-tabs, .modal-overlay, .btn-accion,
-  .seccion-cambio-estado, .modal-footer, .btn-cerrar-modal {
+  #sidebar, .topbar, .contadores-estado-barra, .modal-overlay, .btn-accion,
+  .seccion-cambio-estado, .modal-footer, .btn-cerrar-modal,
+  #btn-menu-mobile, #overlay-sidebar, .fab-nueva-orden, .filtros-ordenes {
     display: none !important;
   }
 
-  .contenido-principal {
+  #contenido-principal {
     margin-left: 0;
   }
 
@@ -1132,66 +1299,48 @@ body {
 
 /* ==================== RESPONSIVE: TABLET (768px - 1023px) ==================== */
 @media (min-width: 768px) and (max-width: 1023px) {
-  /* Sidebar reducida a 120px, solo iconos + número */
-  .sidebar {
-    width: 120px;
-    padding: 16px 8px;
-    align-items: center;
+  /* Sidebar: auto-colapsar en tablet */
+  #sidebar {
+    width: var(--sidebar-colapsado);
   }
 
-  .sidebar-header h2 {
-    font-size: 12px;
-    text-align: center;
-  }
-
-  .sidebar-header p {
-    font-size: 10px;
-    text-align: center;
-  }
-
-  .card-estado {
-    padding: 10px 6px;
-  }
-
-  .card-numero {
-    font-size: 22px;
-  }
-
-  .card-label {
-    font-size: 9px;
-    line-height: 1.2;
-  }
-
-  .contenido-principal {
-    margin-left: 120px;
-  }
-
-  /* Navbar tabs: scroll horizontal */
-  .navbar-tabs {
-    padding: 10px 16px;
-    overflow-x: auto;
-    gap: 8px;
-  }
-
-  .tabs {
-    flex-shrink: 0;
-  }
-
-  .tab {
-    padding: 8px 12px;
-    font-size: 13px;
+  #sidebar .nav-texto,
+  #sidebar .sidebar-titulo,
+  #sidebar .sidebar-usuario-info {
+    opacity: 0;
+    width: 0;
+    overflow: hidden;
     white-space: nowrap;
   }
 
-  .btn-nueva-orden {
-    padding: 8px 14px;
+  #sidebar .nav-item {
+    position: relative;
+    justify-content: center;
+    padding: 14px;
+    border-left: 3px solid transparent;
+  }
+
+  #sidebar .nav-item.activo {
+    border-left: 3px solid #ffcf22;
+  }
+
+  #sidebar .nav-item:hover::after {
+    content: attr(title);
+    position: absolute;
+    left: calc(var(--sidebar-colapsado) + 8px);
+    background: #333;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 6px;
     font-size: 13px;
     white-space: nowrap;
+    z-index: 999;
+    pointer-events: none;
   }
 
   /* Tabla: ocultar columna Hora */
-  .tabla-principal thead th:nth-child(6),
-  .tabla-principal tbody td:nth-child(6) {
+  #tabla-ordenes thead th:nth-child(6),
+  #tabla-ordenes tbody td:nth-child(6) {
     display: none;
   }
 
@@ -1210,15 +1359,6 @@ body {
     width: 90%;
   }
 
-  /* Form grid: mantener 2 columnas */
-  .form-grid-items {
-    grid-template-columns: 2fr 1fr 1fr auto;
-  }
-
-  .seccion-tab {
-    padding: 16px;
-  }
-
   .datos-orden-grid {
     grid-template-columns: 1fr 1fr;
     font-size: 12px;
@@ -1228,118 +1368,71 @@ body {
     width: 200px;
   }
 
-  .btn-cerrar-sesion {
-    font-size: 11px;
-    padding: 6px 8px;
+  /* Chips: más compactos en tablet */
+  .contadores-estado-barra {
+    gap: 8px;
+    padding: 12px 16px 8px;
   }
 
-  .usuario-info {
-    font-size: 10px;
+  .contador-chip {
+    min-width: 75px;
+    padding: 10px 14px;
+  }
+
+  .chip-numero {
+    font-size: 20px;
+  }
+
+  .modulo {
+    padding: 16px;
   }
 }
 
 /* ==================== RESPONSIVE: MÓVIL (< 768px) ==================== */
 @media (max-width: 767px) {
-  /* Mobile header: logo + nombre en la parte superior */
-  .mobile-header {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 10px 16px;
-    background: #fff;
-    border-bottom: 1px solid #e8e8e8;
-    position: sticky;
-    top: 0;
-    z-index: 200;
-  }
-
-  /* Sidebar: barra inferior fija tipo bottom navigation */
-  .sidebar {
-    width: 100%;
-    height: 64px;
+  /* Sidebar como drawer lateral con overlay */
+  #sidebar {
     position: fixed;
-    bottom: 0;
-    top: auto;
+    left: -240px;
+    height: 100%;
+    transition: left 0.25s ease;
+    z-index: 200;
+    width: 240px !important;
+  }
+
+  #sidebar.sidebar-abierto-mobile {
     left: 0;
-    flex-direction: row;
-    padding: 4px 8px;
-    border-right: none;
-    border-top: 1px solid #e0e0e0;
-    box-shadow: 0 -2px 8px rgba(0,0,0,0.08);
-    z-index: 300;
-    overflow: visible;
-    align-items: center;
-    justify-content: space-around;
   }
 
-  .sidebar-header {
+  /* Asegurar textos visibles en mobile drawer */
+  #sidebar.sidebar-abierto-mobile .nav-texto,
+  #sidebar.sidebar-abierto-mobile .sidebar-titulo,
+  #sidebar.sidebar-abierto-mobile .sidebar-usuario-info {
+    opacity: 1;
+    width: auto;
+  }
+
+  /* Ocultar botón colapsar en mobile (usar hamburger) */
+  #btn-colapsar {
     display: none;
   }
 
-  .sidebar-cards {
-    flex-direction: row;
-    flex: 1;
-    justify-content: space-around;
-    align-items: center;
-    gap: 0;
-  }
-
-  .card-estado {
-    flex: 1;
-    padding: 6px 2px;
-    border-radius: 8px;
-    min-width: 0;
-  }
-
-  .card-numero {
-    font-size: 18px;
-  }
-
-  .card-label {
-    font-size: 8px;
-    line-height: 1.1;
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .sidebar-footer {
-    display: none;
-  }
-
-  /* Contenido principal sin margen lateral, con espacio inferior para la barra */
-  .contenido-principal {
-    margin-left: 0;
-    padding-bottom: 74px;
-  }
-
-  /* Navbar tabs */
-  .navbar-tabs {
-    padding: 8px 12px;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .tabs {
+  /* Mostrar botón hamburger en mobile */
+  #btn-menu-mobile {
     display: flex;
-    overflow-x: auto;
-    width: 100%;
-    gap: 2px;
-    -webkit-overflow-scrolling: touch;
   }
 
-  .tab {
-    padding: 8px 10px;
-    font-size: 12px;
-    white-space: nowrap;
-    min-height: 44px;
-    display: flex;
-    align-items: center;
+  /* Top bar: espacio para botón hamburger */
+  .topbar {
+    padding: 16px 16px 16px 56px;
   }
 
-  /* Ocultar botón normal de Nueva Orden en navbar */
-  .btn-nueva-orden {
+  .topbar-titulo {
+    font-size: 16px;
+  }
+
+  /* Ocultar botón normal de Nueva Orden en topbar */
+  #btn-nueva-orden-topbar {
     display: none;
   }
 
@@ -1349,7 +1442,7 @@ body {
     align-items: center;
     justify-content: center;
     position: fixed;
-    bottom: 80px;
+    bottom: 24px;
     right: 16px;
     width: 56px;
     height: 56px;
@@ -1374,6 +1467,25 @@ body {
     font-size: 28px;
   }
 
+  /* Chips de estado en mobile: scroll horizontal */
+  .contadores-estado-barra {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 12px 16px;
+    gap: 8px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .contador-chip {
+    min-width: 75px;
+    padding: 10px 14px;
+    flex-shrink: 0;
+  }
+
+  .chip-numero {
+    font-size: 20px;
+  }
+
   /* Tablas: ocultar en móvil, mostrar cards */
   #tabla-ordenes-container .tabla-principal {
     display: none;
@@ -1384,15 +1496,15 @@ body {
   }
 
   /* Tabla clientes, productos y usuarios: hacer scroll horizontal */
-  #seccion-clientes .tabla-principal,
-  #seccion-productos .tabla-principal,
-  #seccion-usuarios .tabla-principal {
+  #modulo-clientes .tabla-principal,
+  #modulo-productos .tabla-principal,
+  #modulo-usuarios .tabla-principal {
     display: block;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
 
-  .seccion-tab {
+  .modulo {
     padding: 12px;
   }
 
