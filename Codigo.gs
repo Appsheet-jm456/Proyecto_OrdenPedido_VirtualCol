@@ -778,56 +778,71 @@ function generarIdUnico() {
 // ============================================================
 // CRUD — ÓRDENES DE PEDIDO
 // ============================================================
-// Generar número de OP con consecutivo GLOBAL que nunca reinicia
-// Formato: OP-YYYYMMDD-NNN donde NNN es progresivo independiente del día
+// Generar número de OP usando el consecutivo controlado en la hoja Configuracion
+// Formato: OP-YYYYMMDD-NNN donde NNN es el consecutivo global con padding de 3+ dígitos
 // Usa LockService para evitar duplicados por concurrencia
+// Lanza error si el rango de consecutivos se agotó
 function generarNumeroOP() {
   var lock = LockService.getScriptLock();
   try {
     lock.waitLock(10000); // Esperar hasta 10 segundos para obtener el lock
 
-    var props = PropertiesService.getScriptProperties();
-    var ultimoConsecutivo = props.getProperty('ultimo_consecutivo_op');
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var hojaConfig = ss.getSheetByName('Configuracion');
 
-    if (ultimoConsecutivo === null) {
-      // Primera vez: inicializar con la cantidad de órdenes existentes
-      var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-      var hoja = ss.getSheetByName('Orden_Pedido');
-      var totalFilas = hoja.getLastRow() - 1; // Restar encabezado
-      ultimoConsecutivo = totalFilas > 0 ? totalFilas : 0;
-    } else {
-      ultimoConsecutivo = parseInt(ultimoConsecutivo, 10) || 0;
+    // Leer parámetros de consecutivo desde la hoja Configuracion
+    var inicio = 1, fin = 500, actual = 0, filaActual = -1;
+    if (hojaConfig) {
+      var datos = hojaConfig.getDataRange().getValues();
+      for (var i = 1; i < datos.length; i++) {
+        var param = String(datos[i][0]);
+        var val = parseInt(datos[i][1], 10) || 0;
+        if (param === 'consecutivo_inicio') inicio = val || 1;
+        if (param === 'consecutivo_fin')    fin    = val || 500;
+        if (param === 'consecutivo_actual') { actual = val; filaActual = i + 1; }
+      }
     }
 
-    // Incrementar consecutivo
-    var nuevoConsecutivo = ultimoConsecutivo + 1;
+    // Determinar el siguiente número a usar
+    // Si actual es 0 o menor que inicio, usar inicio; si no, incrementar actual
+    var siguiente = (actual === 0 || actual < inicio) ? inicio : actual + 1;
 
-    // Guardar en PropertiesService
-    props.setProperty('ultimo_consecutivo_op', String(nuevoConsecutivo));
+    // Verificar que no supere el límite de la resolución
+    if (siguiente > fin) {
+      lock.releaseLock();
+      throw new Error('RANGO_AGOTADO: El rango de consecutivos se agotó (máximo: ' + fin + '). Contacte al administrador para reiniciar o ampliar el rango.');
+    }
+
+    // Actualizar consecutivo_actual en la hoja Configuracion (dentro del lock)
+    if (hojaConfig && filaActual > 0) {
+      hojaConfig.getRange(filaActual, 2).setValue(siguiente);
+    }
 
     lock.releaseLock();
 
-    // Construir número OP con fecha actual (Colombia) y consecutivo global
+    // Construir número OP con fecha actual (Colombia) y consecutivo con padding mínimo de 3 dígitos
     var hoy = new Date();
     var fechaStr = Utilities.formatDate(hoy, 'America/Bogota', 'yyyyMMdd');
-    var numFormateado = ('000' + nuevoConsecutivo).slice(-3);
-    return 'OP-' + fechaStr + '-' + numFormateado;
+    var numStr = String(siguiente);
+    while (numStr.length < 3) numStr = '0' + numStr;
+    return 'OP-' + fechaStr + '-' + numStr;
 
   } catch (e) {
-    // Si falla el lock, intentar liberar y lanzar error
+    // Liberar el lock en caso de error y relanzar
     try { lock.releaseLock(); } catch(ignored) {}
-    throw new Error('No se pudo generar el número de OP: ' + e.message);
+    throw e;
   }
 }
 
 function crearOrden(datosOrden, detalleItems) {
+  try {
   var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   var hojaOP = ss.getSheetByName('Orden_Pedido');
   var hojaDetalle = ss.getSheetByName('Detalle_Pedido');
 
   // Generar UUID alfanumérico como id_op (llave primaria única)
   var nuevoIdOP = generarIdUnico();
-  var numeroOP = generarNumeroOP();
+  var numeroOP = generarNumeroOP(); // Puede lanzar error si rango agotado
 
   var ahora = new Date();
   var fecha = Utilities.formatDate(ahora, 'America/Bogota', 'yyyy-MM-dd');
@@ -883,6 +898,82 @@ function crearOrden(datosOrden, detalleItems) {
   }
 
   return { success: true, numero_op: numeroOP, id_op: nuevoIdOP };
+
+  } catch (e) {
+    // Retornar error estructurado en vez de lanzar excepción al frontend
+    return { success: false, error: e.message };
+  }
+}
+
+// ============================================================
+// Retorna información del estado actual del consecutivo de OP
+// ============================================================
+function obtenerInfoConsecutivo() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var hojaConfig = ss.getSheetByName('Configuracion');
+
+  var inicio = 1, fin = 500, actual = 0;
+  if (hojaConfig) {
+    var datos = hojaConfig.getDataRange().getValues();
+    for (var i = 1; i < datos.length; i++) {
+      var param = String(datos[i][0]);
+      var val = parseInt(datos[i][1], 10) || 0;
+      if (param === 'consecutivo_inicio') inicio = val || 1;
+      if (param === 'consecutivo_fin')    fin    = val || 500;
+      if (param === 'consecutivo_actual') actual = val;
+    }
+  }
+
+  var rango = fin - inicio + 1;
+  var usados = (actual === 0 || actual < inicio) ? 0 : (actual - inicio + 1);
+  var disponibles = fin - (actual === 0 ? inicio - 1 : Math.max(actual, inicio - 1));
+  var porcentajeUso = rango > 0 ? Math.round((usados / rango) * 100) : 0;
+
+  return {
+    inicio: inicio,
+    fin: fin,
+    actual: actual,
+    usados: usados,
+    disponibles: disponibles,
+    porcentajeUso: porcentajeUso
+  };
+}
+
+// ============================================================
+// Reiniciar consecutivo: pone consecutivo_actual en 0
+// Solo accesible para Super admin (validación en frontend; en producción validar sesión)
+// ============================================================
+function reiniciarConsecutivo() {
+  var resultado = actualizarConfiguracion('consecutivo_actual', 0);
+  if (resultado.ok) {
+    var info = obtenerInfoConsecutivo();
+    return { ok: true, mensaje: 'Consecutivo reiniciado. La siguiente OP usará el número: ' + info.inicio };
+  }
+  return { ok: false, mensaje: resultado.mensaje || 'Error al reiniciar el consecutivo.' };
+}
+
+// ============================================================
+// Actualizar rango de consecutivos (inicio y fin)
+// Valida que sean enteros positivos y que inicio < fin
+// ============================================================
+function actualizarRangoConsecutivo(inicio, fin) {
+  inicio = parseInt(inicio, 10);
+  fin    = parseInt(fin,    10);
+
+  if (isNaN(inicio) || isNaN(fin) || inicio < 1 || fin < 1) {
+    return { ok: false, mensaje: 'Los valores deben ser números enteros positivos.' };
+  }
+  if (inicio >= fin) {
+    return { ok: false, mensaje: 'El inicio debe ser menor que el fin.' };
+  }
+
+  var r1 = actualizarConfiguracion('consecutivo_inicio', inicio);
+  var r2 = actualizarConfiguracion('consecutivo_fin',    fin);
+
+  if (r1.ok && r2.ok) {
+    return { ok: true, mensaje: 'Rango guardado: ' + inicio + ' — ' + fin };
+  }
+  return { ok: false, mensaje: 'Error al guardar. Verifique que los parámetros existan en la hoja Configuracion.' };
 }
 
 function obtenerOrdenes(filtros) {

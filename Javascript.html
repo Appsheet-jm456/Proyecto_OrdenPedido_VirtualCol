@@ -733,6 +733,17 @@ function mostrarPaginaNuevaOrden() {
   // Cargar lista de clientes para autocomplete
   cargarClientesAutocomplete();
 
+  // Verificar disponibilidad de consecutivos y alertar si quedan pocos
+  google.script.run
+    .withSuccessHandler(function(info) {
+      if (info.disponibles <= 0) {
+        mostrarNotificacion('Sin consecutivos disponibles. Contacte al administrador.', 'error');
+      } else if (info.disponibles <= 20) {
+        mostrarNotificacion('Atención: Quedan solo ' + info.disponibles + ' consecutivos disponibles.', 'advertencia');
+      }
+    })
+    .obtenerInfoConsecutivo();
+
   // Navegar a la página de nueva orden
   mostrarModulo('nueva-orden');
 }
@@ -883,7 +894,11 @@ function guardarNuevaOrden() {
         cargarContadores();
         regresarAOrdenes();
       } else {
-        alert('Error al crear la orden');
+        // Mostrar el error específico (ej: rango de consecutivos agotado)
+        var msg = resultado.error || 'Error al crear la orden.';
+        // Quitar prefijo técnico antes de mostrar al usuario
+        msg = msg.replace('RANGO_AGOTADO: ', '');
+        alert(msg);
       }
     })
     .withFailureHandler(function(error) {
@@ -1875,7 +1890,10 @@ function imprimirOrden() {
 
 // ==================== CONFIGURACIÓN (Super admin) ====================
 
-// Cargar configuración en la tabla editable
+// Parámetros de consecutivo que se gestionan en la sección propia (no en la tabla general)
+var PARAMS_CONSECUTIVO = ['consecutivo_inicio', 'consecutivo_fin', 'consecutivo_actual'];
+
+// Cargar configuración general y de consecutivos
 function cargarConfiguracion() {
   google.script.run
     .withSuccessHandler(function(config) {
@@ -1887,6 +1905,9 @@ function cargarConfiguracion() {
       tbody.innerHTML = '<tr><td colspan="4" class="sin-datos">Error al cargar configuración</td></tr>';
     })
     .getConfiguracion();
+
+  // Cargar también la sección de consecutivos
+  cargarInfoConsecutivo();
 }
 
 // Descripciones de cada parámetro (para mostrar en la tabla)
@@ -1913,6 +1934,8 @@ function renderizarTablaConfiguracion(config) {
   var html = '';
   for (var i = 0; i < parametros.length; i++) {
     var param = parametros[i];
+    // Los parámetros de consecutivo tienen su propia sección de gestión
+    if (PARAMS_CONSECUTIVO.indexOf(param) !== -1) continue;
     var valor = config[param] || '';
     var desc = CONFIG_DESCRIPCIONES[param] || '';
     var previewHtml = '';
@@ -1936,6 +1959,109 @@ function renderizarTablaConfiguracion(config) {
   }
 
   tbody.innerHTML = html;
+}
+
+// ==================== CONSECUTIVOS OP ====================
+
+// Cargar y renderizar la sección de control de consecutivos
+function cargarInfoConsecutivo() {
+  google.script.run
+    .withSuccessHandler(renderizarInfoConsecutivo)
+    .withFailureHandler(function() {
+      document.getElementById('consec-progreso-texto').textContent = 'Error al cargar datos de consecutivo.';
+    })
+    .obtenerInfoConsecutivo();
+}
+
+// Actualizar la UI de la sección de consecutivos con los datos del servidor
+function renderizarInfoConsecutivo(info) {
+  document.getElementById('consec-inicio').value = info.inicio;
+  document.getElementById('consec-fin').value    = info.fin;
+  document.getElementById('consec-actual-display').textContent =
+    info.actual === 0 ? 'Sin usar' : info.actual;
+
+  // Barra de progreso con color según porcentaje de uso
+  var pct   = Math.min(info.porcentajeUso, 100);
+  var barra = document.getElementById('consec-barra');
+  barra.style.width = pct + '%';
+
+  if (pct >= 90) {
+    barra.style.background = '#f44336'; // Rojo: uso crítico
+  } else if (pct >= 70) {
+    barra.style.background = '#ff9800'; // Naranja: uso alto
+  } else {
+    barra.style.background = '#4caf50'; // Verde: uso normal
+  }
+
+  var rango = info.fin - info.inicio + 1;
+  document.getElementById('consec-progreso-texto').textContent =
+    'Usados: ' + info.usados + ' de ' + rango + '  —  Disponibles: ' + info.disponibles;
+}
+
+// Guardar el rango de consecutivos (inicio y fin) en el backend
+function guardarRangoConsecutivo() {
+  var inicio = parseInt(document.getElementById('consec-inicio').value, 10);
+  var fin    = parseInt(document.getElementById('consec-fin').value,    10);
+
+  if (isNaN(inicio) || isNaN(fin) || inicio < 1 || fin < 1) {
+    mostrarMensajeConsec('Ingrese valores numéricos enteros y positivos.', 'error');
+    return;
+  }
+  if (inicio >= fin) {
+    mostrarMensajeConsec('El inicio debe ser menor que el fin.', 'error');
+    return;
+  }
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.ok) {
+        mostrarMensajeConsec(res.mensaje || 'Rango guardado correctamente.', 'exito');
+        cargarInfoConsecutivo();
+      } else {
+        mostrarMensajeConsec(res.mensaje || 'Error al guardar el rango.', 'error');
+      }
+    })
+    .withFailureHandler(function(e) {
+      mostrarMensajeConsec('Error: ' + e.message, 'error');
+    })
+    .actualizarRangoConsecutivo(inicio, fin);
+}
+
+// Pedir confirmación antes de reiniciar el consecutivo
+function confirmarReinicioConsecutivo() {
+  var inicio = document.getElementById('consec-inicio').value || '?';
+  var ok = window.confirm(
+    '¿Está seguro de reiniciar el consecutivo?\n' +
+    'La siguiente OP empezará desde ' + inicio + '.\n' +
+    'Esta acción no se puede deshacer.'
+  );
+  if (ok) ejecutarReinicioConsecutivo();
+}
+
+// Ejecutar el reinicio del consecutivo en el backend
+function ejecutarReinicioConsecutivo() {
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.ok) {
+        mostrarMensajeConsec(res.mensaje || 'Consecutivo reiniciado.', 'exito');
+        cargarInfoConsecutivo();
+      } else {
+        mostrarMensajeConsec(res.mensaje || 'Error al reiniciar.', 'error');
+      }
+    })
+    .withFailureHandler(function(e) {
+      mostrarMensajeConsec('Error: ' + e.message, 'error');
+    })
+    .reiniciarConsecutivo();
+}
+
+// Mostrar mensaje temporal en la sección de consecutivos
+function mostrarMensajeConsec(texto, tipo) {
+  var el = document.getElementById('consec-mensaje');
+  el.textContent = texto;
+  el.className = 'config-mensaje ' + tipo;
+  el.style.display = 'inline-block';
+  setTimeout(function() { el.style.display = 'none'; }, 5000);
 }
 
 // Escape HTML para evitar inyección

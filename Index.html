@@ -667,6 +667,47 @@
           <div class="seccion-header">
             <h3><span class="material-icons" style="vertical-align:middle; margin-right:6px;">settings</span>Configuración del Negocio</h3>
           </div>
+
+          <!-- Sección: Control de Consecutivos OP -->
+          <div class="consecutivos-container">
+            <div class="consecutivos-header">
+              <span class="material-icons" style="vertical-align:middle; margin-right:8px; color:#ffcf22;">confirmation_number</span>
+              <h4 style="margin:0; font-size:15px; font-weight:700;">Resolución de Consecutivos — Órdenes de Pedido</h4>
+            </div>
+            <div class="consecutivos-body">
+              <div class="consec-rango-grid">
+                <div class="consec-campo">
+                  <label class="config-label">Desde (inicio)</label>
+                  <input type="number" id="consec-inicio" class="config-input" min="1" step="1" placeholder="1">
+                </div>
+                <div class="consec-campo">
+                  <label class="config-label">Hasta (fin)</label>
+                  <input type="number" id="consec-fin" class="config-input" min="1" step="1" placeholder="500">
+                </div>
+                <div class="consec-campo">
+                  <label class="config-label">Último consecutivo usado</label>
+                  <div class="consec-actual-readonly" id="consec-actual-display">—</div>
+                </div>
+              </div>
+              <div class="consec-progreso-wrap">
+                <div class="consec-progreso-bar-bg">
+                  <div class="consec-progreso-bar" id="consec-barra" style="width:0%"></div>
+                </div>
+                <span class="consec-progreso-texto" id="consec-progreso-texto">Cargando...</span>
+              </div>
+              <div class="consecutivos-acciones">
+                <button class="btn-principal" onclick="guardarRangoConsecutivo()" style="width:auto; padding:10px 22px;">
+                  <span class="material-icons" style="font-size:16px; vertical-align:middle;">save</span> Guardar rango
+                </button>
+                <button class="btn-reiniciar-consec" onclick="confirmarReinicioConsecutivo()">
+                  <span class="material-icons" style="font-size:16px; vertical-align:middle;">restart_alt</span> Reiniciar consecutivo
+                </button>
+              </div>
+              <span id="consec-mensaje" class="config-mensaje" style="display:none; margin-top:8px;"></span>
+            </div>
+          </div>
+
+          <!-- Tabla de parámetros generales del negocio -->
           <div class="config-tabla-container">
             <table class="tabla-principal" id="tabla-configuracion">
               <thead>
