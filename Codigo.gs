@@ -247,6 +247,33 @@ function actualizarConfiguracion(parametro, valor) {
 }
 
 // ============================================================
+// Upsert de configuración: actualiza si existe, crea la fila si no existe
+// Se usa para parámetros de consecutivo que pueden no estar aún en la hoja
+// ============================================================
+function upsertConfiguracion(parametro, valor, descripcion) {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var hoja = ss.getSheetByName('Configuracion');
+
+  if (!hoja) {
+    return { ok: false, mensaje: 'Hoja Configuracion no encontrada' };
+  }
+
+  var datos = hoja.getDataRange().getValues();
+
+  // Buscar fila existente
+  for (var i = 1; i < datos.length; i++) {
+    if (String(datos[i][0]) === parametro) {
+      hoja.getRange(i + 1, 2).setValue(valor);
+      return { ok: true };
+    }
+  }
+
+  // No existe: crear nueva fila con parámetro, valor y descripción
+  hoja.appendRow([parametro, valor, descripcion || '']);
+  return { ok: true };
+}
+
+// ============================================================
 // Insertar usuario Super Admin por defecto
 // Ejecutar después de crearTablas()
 // ============================================================
@@ -944,7 +971,8 @@ function obtenerInfoConsecutivo() {
 // Solo accesible para Super admin (validación en frontend; en producción validar sesión)
 // ============================================================
 function reiniciarConsecutivo() {
-  var resultado = actualizarConfiguracion('consecutivo_actual', 0);
+  // upsertConfiguracion crea la fila si no existe en la hoja
+  var resultado = upsertConfiguracion('consecutivo_actual', 0, 'Último número de consecutivo usado (se actualiza automáticamente)');
   if (resultado.ok) {
     var info = obtenerInfoConsecutivo();
     return { ok: true, mensaje: 'Consecutivo reiniciado. La siguiente OP usará el número: ' + info.inicio };
@@ -955,6 +983,7 @@ function reiniciarConsecutivo() {
 // ============================================================
 // Actualizar rango de consecutivos (inicio y fin)
 // Valida que sean enteros positivos y que inicio < fin
+// Usa upsert para crear las filas si aún no existen en la hoja
 // ============================================================
 function actualizarRangoConsecutivo(inicio, fin) {
   inicio = parseInt(inicio, 10);
@@ -967,8 +996,21 @@ function actualizarRangoConsecutivo(inicio, fin) {
     return { ok: false, mensaje: 'El inicio debe ser menor que el fin.' };
   }
 
-  var r1 = actualizarConfiguracion('consecutivo_inicio', inicio);
-  var r2 = actualizarConfiguracion('consecutivo_fin',    fin);
+  var r1 = upsertConfiguracion('consecutivo_inicio', inicio, 'Número inicial del consecutivo de OP');
+  var r2 = upsertConfiguracion('consecutivo_fin',    fin,   'Número máximo del consecutivo de OP (fin de resolución)');
+  // Crear consecutivo_actual solo si no existe (no sobrescribir el valor actual)
+  var ss2 = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var hConf = ss2.getSheetByName('Configuracion');
+  if (hConf) {
+    var rows = hConf.getDataRange().getValues();
+    var tieneActual = false;
+    for (var k = 1; k < rows.length; k++) {
+      if (String(rows[k][0]) === 'consecutivo_actual') { tieneActual = true; break; }
+    }
+    if (!tieneActual) {
+      hConf.appendRow(['consecutivo_actual', 0, 'Último número de consecutivo usado (se actualiza automáticamente)']);
+    }
+  }
 
   if (r1.ok && r2.ok) {
     return { ok: true, mensaje: 'Rango guardado: ' + inicio + ' — ' + fin };

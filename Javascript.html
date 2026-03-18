@@ -14,6 +14,8 @@ var itemsNuevaOrden = [];
 var ordenSeleccionada = null;
 var detalleOrdenActual = []; // Detalle de productos de la orden en vista
 var filtroEstadoActual = null;
+// Parámetros de consecutivo — se gestionan en sección propia, NO en la tabla general de config
+var PARAMS_CONSECUTIVO = ['consecutivo_inicio', 'consecutivo_fin', 'consecutivo_actual'];
 var itemProductoSeleccionado = ''; // id_producto del autocomplete (vacío si texto libre)
 window.appConfig = {}; // Configuración global del negocio
 
@@ -1890,9 +1892,6 @@ function imprimirOrden() {
 
 // ==================== CONFIGURACIÓN (Super admin) ====================
 
-// Parámetros de consecutivo que se gestionan en la sección propia (no en la tabla general)
-var PARAMS_CONSECUTIVO = ['consecutivo_inicio', 'consecutivo_fin', 'consecutivo_actual'];
-
 // Cargar configuración general y de consecutivos
 function cargarConfiguracion() {
   google.script.run
@@ -1906,8 +1905,14 @@ function cargarConfiguracion() {
     })
     .getConfiguracion();
 
-  // Cargar también la sección de consecutivos
-  cargarInfoConsecutivo();
+  // La sección de consecutivos solo se carga y muestra para Super admin
+  var secConsec = document.getElementById('consecutivos-container');
+  if (usuarioActual && usuarioActual.rol === 'Super admin') {
+    if (secConsec) secConsec.style.display = '';
+    cargarInfoConsecutivo();
+  } else {
+    if (secConsec) secConsec.style.display = 'none';
+  }
 }
 
 // Descripciones de cada parámetro (para mostrar en la tabla)
