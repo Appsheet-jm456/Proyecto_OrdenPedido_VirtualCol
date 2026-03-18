@@ -212,49 +212,58 @@ var TITULOS_MODULO = {
   productos: 'Productos',
   usuarios: 'Gestión de Usuarios',
   reportes: 'Reportes',
-  configuracion: 'Configuración'
+  configuracion: 'Configuración',
+  'nueva-orden': 'Nueva Orden de Pedido',
+  'ver-orden': 'Ver / Gestionar Orden'
 };
+
+// Submódulos: no actualizan el nav activo ni recargan datos
+var MODULOS_SUB = ['nueva-orden', 'ver-orden'];
 
 // Cambiar módulo activo (reemplaza cambiarTab)
 function mostrarModulo(nombreModulo) {
-  // 1. Quitar clase 'activo' de todos los nav-item
-  var navItems = document.querySelectorAll('.sidebar-nav .nav-item');
-  for (var i = 0; i < navItems.length; i++) {
-    navItems[i].classList.remove('activo');
+  var esSubmodulo = MODULOS_SUB.indexOf(nombreModulo) !== -1;
+
+  // 1. Actualizar nav activo solo en módulos principales
+  if (!esSubmodulo) {
+    var navItems = document.querySelectorAll('.sidebar-nav .nav-item');
+    for (var i = 0; i < navItems.length; i++) {
+      navItems[i].classList.remove('activo');
+    }
+    var navActivo = document.querySelector('.nav-item[data-modulo="' + nombreModulo + '"]');
+    if (navActivo) navActivo.classList.add('activo');
   }
 
-  // 2. Agregar clase 'activo' al nav-item correspondiente
-  var navActivo = document.querySelector('.nav-item[data-modulo="' + nombreModulo + '"]');
-  if (navActivo) navActivo.classList.add('activo');
-
-  // 3. Ocultar todos los módulos
+  // 2. Ocultar todos los módulos
   var modulos = document.querySelectorAll('.modulo');
   for (var j = 0; j < modulos.length; j++) {
     modulos[j].classList.add('oculto');
   }
 
-  // 4. Mostrar el módulo seleccionado
+  // 3. Mostrar el módulo seleccionado
   var moduloActivo = document.getElementById('modulo-' + nombreModulo);
   if (moduloActivo) moduloActivo.classList.remove('oculto');
 
-  // 5. Actualizar título del topbar
+  // 4. Actualizar título del topbar
   var titulo = TITULOS_MODULO[nombreModulo] || nombreModulo;
   document.getElementById('titulo-modulo').textContent = titulo;
 
-  // 6. Mostrar u ocultar botón Nueva Orden (solo en módulo órdenes)
+  // 5. Mostrar/ocultar botón Nueva Orden (solo en módulo órdenes)
   var btnNueva = document.getElementById('btn-nueva-orden-topbar');
   if (btnNueva) {
     btnNueva.style.display = (nombreModulo === 'ordenes') ? 'flex' : 'none';
   }
 
-  // 7. Cargar datos según módulo
-  if (nombreModulo === 'ordenes') { cargarOrdenes(); cargarContadores(); }
-  if (nombreModulo === 'clientes') cargarClientes();
-  if (nombreModulo === 'productos') cargarProductos();
-  if (nombreModulo === 'usuarios') cargarUsuarios();
-  if (nombreModulo === 'configuracion') cargarConfiguracion();
+  // 6. Cargar datos según módulo (no para submódulos)
+  if (!esSubmodulo) {
+    if (nombreModulo === 'ordenes') { cargarOrdenes(); cargarContadores(); }
+    if (nombreModulo === 'clientes') cargarClientes();
+    if (nombreModulo === 'productos') cargarProductos();
+    if (nombreModulo === 'usuarios') cargarUsuarios();
+    if (nombreModulo === 'configuracion') cargarConfiguracion();
+  }
 
-  // 8. Cerrar sidebar en mobile al seleccionar módulo
+  // 7. Cerrar sidebar en mobile al navegar
   cerrarSidebarMobile();
 }
 
@@ -561,21 +570,23 @@ function verOrden(idOp) {
   if (!orden) return;
   ordenSeleccionada = orden;
 
-  // Llenar datos del modal
-  document.getElementById('modal-titulo-op').textContent = 'Orden ' + orden.numero_op;
-  document.getElementById('ver-numero-op').textContent = orden.numero_op;
-  document.getElementById('ver-fecha').textContent = orden.fecha;
+  // Llenar datos de la página de ver/gestionar
+  var numOp = orden.numero_op || '—';
+  document.getElementById('ver-breadcrumb-op').textContent = numOp;
+  document.getElementById('ver-numero-op').textContent = numOp;
+  document.getElementById('ver-fecha').textContent = orden.fecha || '—';
   document.getElementById('ver-fecha-prestamo').textContent = orden.fecha_prestamo || '—';
   document.getElementById('ver-fecha-limite').textContent = orden.fecha_limite_devolucion || '—';
-  document.getElementById('ver-cliente').textContent = orden.nombre_cliente;
-  document.getElementById('ver-vendedor').textContent = orden.nombre_vendedor;
-  document.getElementById('ver-local').textContent = orden.local_origen;
+  document.getElementById('ver-cliente').textContent = orden.nombre_cliente || '—';
+  document.getElementById('ver-vendedor').textContent = orden.nombre_vendedor || '—';
+  document.getElementById('ver-local').textContent = orden.local_origen || '—';
   document.getElementById('ver-receptor').textContent = orden.nombre_receptor || '—';
   document.getElementById('ver-observaciones').textContent = orden.observaciones || 'Sin observaciones';
 
   // Resetear campo de receptor para transición
   document.getElementById('ver-nombre-receptor').value = '';
   document.getElementById('campo-receptor-prestado').style.display = 'none';
+  document.getElementById('ver-observaciones-cambio').value = '';
 
   // Badge de estado
   var badgeEstado = document.getElementById('ver-estado-badge');
@@ -592,8 +603,8 @@ function verOrden(idOp) {
   // Generar botones de transición según estado
   generarBotonesTransicion(orden.estado, idOp);
 
-  // Mostrar modal
-  document.getElementById('modal-ver-orden').style.display = 'flex';
+  // Navegar a la página de ver/gestionar (reemplaza apertura de modal)
+  mostrarModulo('ver-orden');
 }
 
 function renderizarDetalleOrden(detalle) {
@@ -668,10 +679,10 @@ function cambiarEstado(idOp, nuevoEstado) {
   google.script.run
     .withSuccessHandler(function(resultado) {
       if (resultado.success) {
-        alert('Estado actualizado a: ' + nuevoEstado);
-        cerrarModal('modal-ver-orden');
+        mostrarNotificacion('Estado actualizado a: ' + nuevoEstado, 'exito');
         cargarOrdenes();
         cargarContadores();
+        regresarAOrdenes();
       } else {
         alert('Error: ' + resultado.mensaje);
       }
@@ -682,8 +693,11 @@ function cambiarEstado(idOp, nuevoEstado) {
     .actualizarEstadoOrden(idOp, nuevoEstado, observaciones, nombreReceptor);
 }
 
-// ==================== NUEVA ORDEN ====================
-function abrirModalNuevaOrden() {
+// ==================== NUEVA ORDEN — PÁGINA COMPLETA ====================
+
+// Navegar a la página de nueva orden (reemplaza el modal)
+function mostrarPaginaNuevaOrden() {
+  // Limpiar estado del formulario
   itemsNuevaOrden = [];
   document.getElementById('nueva-orden-cliente').value = '';
   document.getElementById('nueva-orden-id-cliente').value = '';
@@ -695,12 +709,17 @@ function abrirModalNuevaOrden() {
   document.getElementById('item-valor').value = '';
   renderizarItemsNuevaOrden();
 
+  // Mostrar fecha actual en el campo de solo lectura
+  var hoy = new Date();
+  var fechaStr = hoy.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  document.getElementById('nueva-orden-fecha-display').textContent = fechaStr;
+
   // Resetear formulario inline de nuevo cliente
   document.getElementById('form-nuevo-cliente-inline').style.display = 'none';
   document.getElementById('btn-toggle-nuevo-cliente').style.display = 'inline-flex';
   limpiarFormClienteInline();
 
-  // Resetear buscador de productos, selección y formulario inline de producto
+  // Resetear buscador de productos y formulario inline de producto
   itemProductoSeleccionado = '';
   document.getElementById('item-buscar-producto').value = '';
   document.getElementById('dropdown-productos').style.display = 'none';
@@ -711,7 +730,30 @@ function abrirModalNuevaOrden() {
   // Cargar lista de clientes para autocomplete
   cargarClientesAutocomplete();
 
-  document.getElementById('modal-nueva-orden').style.display = 'flex';
+  // Navegar a la página de nueva orden
+  mostrarModulo('nueva-orden');
+}
+
+// Alias para compatibilidad con código existente
+function abrirModalNuevaOrden() {
+  mostrarPaginaNuevaOrden();
+}
+
+// Regresar al listado de órdenes desde cualquier subpágina
+function regresarAOrdenes() {
+  mostrarModulo('ordenes');
+}
+
+// Cancelar creación de nueva orden (pide confirmación si hay datos)
+function cancelarNuevaOrden() {
+  var tieneCliente = document.getElementById('nueva-orden-cliente').value.trim();
+  var tieneItems = itemsNuevaOrden.length > 0;
+  var tieneObs = document.getElementById('nueva-orden-observaciones').value.trim();
+
+  if (tieneCliente || tieneItems || tieneObs) {
+    if (!confirm('¿Desea salir sin guardar? Se perderán los datos ingresados.')) return;
+  }
+  regresarAOrdenes();
 }
 
 function cargarClientesAutocomplete() {
@@ -781,7 +823,7 @@ function renderizarItemsNuevaOrden() {
   var total = 0;
 
   if (itemsNuevaOrden.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="sin-datos">Agregue productos a la orden</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="sin-datos">Agregue productos a la orden</td></tr>';
     document.getElementById('total-items').innerHTML = '<strong>$0</strong>';
     return;
   }
@@ -792,17 +834,18 @@ function renderizarItemsNuevaOrden() {
     total += item.valor_total;
 
     html += '<tr>' +
+      '<td style="color:#888; font-size:12px;">' + (i + 1) + '</td>' +
       '<td>' + item.descripcion_libre + '</td>' +
       '<td>' + item.cantidad + '</td>' +
-      '<td>$' + formatearNumero(item.valor_unitario) + '</td>' +
-      '<td>$' + formatearNumero(item.valor_total) + '</td>' +
-      '<td><button class="btn-eliminar-item" onclick="eliminarItem(' + i + ')">' +
+      '<td>' + formatearMoneda(item.valor_unitario) + '</td>' +
+      '<td><strong>' + formatearMoneda(item.valor_total) + '</strong></td>' +
+      '<td><button class="btn-eliminar-item" onclick="eliminarItem(' + i + ')" title="Eliminar ítem">' +
       '<span class="material-icons">delete</span></button></td>' +
       '</tr>';
   }
 
   tbody.innerHTML = html;
-  document.getElementById('total-items').innerHTML = '<strong>$' + formatearNumero(total) + '</strong>';
+  document.getElementById('total-items').innerHTML = '<strong>' + formatearMoneda(total) + '</strong>';
 }
 
 function guardarNuevaOrden() {
@@ -832,10 +875,10 @@ function guardarNuevaOrden() {
   google.script.run
     .withSuccessHandler(function(resultado) {
       if (resultado.success) {
-        alert('Orden creada: ' + resultado.numero_op);
-        cerrarModal('modal-nueva-orden');
+        mostrarNotificacion('Orden creada: ' + resultado.numero_op, 'exito');
         cargarOrdenes();
         cargarContadores();
+        regresarAOrdenes();
       } else {
         alert('Error al crear la orden');
       }
@@ -1793,8 +1836,27 @@ function mostrarMensajeConfig(mensaje, tipo) {
 }
 
 // ==================== UTILIDADES ====================
+
+// Mostrar notificación flotante tipo toast (reemplaza alert() para mensajes de éxito)
+function mostrarNotificacion(mensaje, tipo) {
+  var notif = document.getElementById('notificacion-toast');
+  if (!notif) {
+    notif = document.createElement('div');
+    notif.id = 'notificacion-toast';
+    notif.className = 'notificacion-toast';
+    document.body.appendChild(notif);
+  }
+  notif.textContent = mensaje;
+  notif.className = 'notificacion-toast notif-' + (tipo || 'exito') + ' notif-visible';
+  clearTimeout(notif._timeout);
+  notif._timeout = setTimeout(function() {
+    notif.classList.remove('notif-visible');
+  }, 3500);
+}
+
 function cerrarModal(idModal) {
-  document.getElementById(idModal).style.display = 'none';
+  var el = document.getElementById(idModal);
+  if (el) el.style.display = 'none';
 }
 
 // Cerrar modal al hacer clic fuera

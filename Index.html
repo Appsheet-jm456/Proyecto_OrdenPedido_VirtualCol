@@ -120,7 +120,7 @@
         <!-- HEADER TOP BAR del contenido -->
         <div class="topbar">
           <h2 class="topbar-titulo" id="titulo-modulo">Órdenes de Pedido</h2>
-          <button class="btn-nueva-orden" onclick="abrirModalNuevaOrden()" id="btn-nueva-orden-topbar">
+          <button class="btn-nueva-orden" onclick="mostrarPaginaNuevaOrden()" id="btn-nueva-orden-topbar">
             <span class="material-icons">add</span> Nueva Orden
           </button>
         </div>
@@ -364,6 +364,304 @@
           </div>
         </div>
 
+        <!-- MÓDULO: NUEVA ORDEN (página completa — reemplaza modal) -->
+        <div id="modulo-nueva-orden" class="modulo oculto">
+          <!-- Breadcrumb de navegación -->
+          <div class="breadcrumb no-print">
+            <span class="breadcrumb-link" onclick="regresarAOrdenes()">
+              <span class="material-icons breadcrumb-icon">receipt_long</span>Órdenes de Pedido
+            </span>
+            <span class="material-icons breadcrumb-sep">chevron_right</span>
+            <span class="breadcrumb-actual">Nueva Orden</span>
+          </div>
+
+          <!-- Página de documento estilo contable -->
+          <div class="pagina-documento">
+
+            <!-- Encabezado del documento: N° OP, fecha, cliente, local -->
+            <div class="doc-seccion">
+              <div class="doc-encabezado-grid">
+                <div class="campo-doc-readonly">
+                  <label class="doc-label">N° OP</label>
+                  <div class="doc-valor-readonly">Se asignará al guardar</div>
+                </div>
+                <div class="campo-doc-readonly">
+                  <label class="doc-label">Fecha</label>
+                  <div class="doc-valor-readonly" id="nueva-orden-fecha-display"></div>
+                </div>
+                <div class="campo-form">
+                  <label>Cliente / Local *</label>
+                  <input type="text" id="nueva-orden-cliente" placeholder="Buscar cliente..." list="lista-clientes" oninput="buscarClienteAutocomplete()" autocomplete="off">
+                  <datalist id="lista-clientes"></datalist>
+                  <input type="hidden" id="nueva-orden-id-cliente">
+                  <!-- Enlace para crear cliente nuevo inline -->
+                  <a href="javascript:void(0)" id="btn-toggle-nuevo-cliente" class="enlace-nuevo-cliente" onclick="toggleFormNuevoClienteInline()">
+                    <span class="material-icons" style="font-size:16px; vertical-align:middle;">add</span> Crear nuevo cliente
+                  </a>
+                  <!-- Mini-formulario inline para crear cliente -->
+                  <div id="form-nuevo-cliente-inline" class="form-cliente-inline" style="display:none;">
+                    <div class="form-cliente-inline-grid">
+                      <div class="campo-form">
+                        <label>Nombre del local *</label>
+                        <input type="text" id="inline-cliente-nombre" placeholder="Nombre del local">
+                      </div>
+                      <div class="campo-form">
+                        <label>Contacto</label>
+                        <input type="text" id="inline-cliente-contacto" placeholder="Persona de contacto">
+                      </div>
+                      <div class="campo-form">
+                        <label>Teléfono</label>
+                        <input type="tel" id="inline-cliente-telefono" placeholder="Teléfono">
+                      </div>
+                      <div class="campo-form">
+                        <label>Ciudad</label>
+                        <input type="text" id="inline-cliente-ciudad" placeholder="Ciudad" value="Cali">
+                      </div>
+                    </div>
+                    <div class="form-cliente-inline-acciones">
+                      <button type="button" class="btn-guardar-cliente-inline" onclick="guardarClienteInline()">
+                        <span class="material-icons" style="font-size:16px; vertical-align:middle;">save</span> Guardar cliente
+                      </button>
+                      <button type="button" class="btn-cancelar-cliente-inline" onclick="toggleFormNuevoClienteInline()">Cancelar</button>
+                    </div>
+                    <div id="inline-cliente-mensaje" class="inline-cliente-mensaje" style="display:none;"></div>
+                  </div>
+                </div>
+                <div class="campo-form">
+                  <label>Local de origen</label>
+                  <input type="text" id="nueva-orden-local" placeholder="Local de origen">
+                </div>
+              </div>
+            </div>
+
+            <!-- Tabla de detalle de productos -->
+            <div class="doc-seccion">
+              <h4 class="doc-seccion-titulo">Detalle de Productos</h4>
+
+              <!-- Buscador de productos + formulario inline de nuevo producto -->
+              <div class="items-agregar">
+                <div class="campo-form" style="margin-bottom:8px; position:relative;">
+                  <input type="text" id="item-buscar-producto" placeholder="Buscar producto existente..." oninput="buscarProductoAutocomplete()" autocomplete="off">
+                  <div id="dropdown-productos" class="dropdown-autocomplete" style="display:none;"></div>
+                </div>
+                <a href="javascript:void(0)" id="btn-toggle-nuevo-producto-inline" class="enlace-nuevo-cliente" onclick="toggleFormNuevoProductoInline()" style="margin-bottom:10px; display:inline-flex;">
+                  <span class="material-icons" style="font-size:16px; vertical-align:middle;">add</span> Crear nuevo producto
+                </a>
+                <!-- Mini-formulario inline para crear producto -->
+                <div id="form-nuevo-producto-inline" class="form-cliente-inline" style="display:none;">
+                  <div class="form-cliente-inline-grid">
+                    <div class="campo-form">
+                      <label>Nombre del producto *</label>
+                      <input type="text" id="inline-producto-nombre" placeholder="Nombre del producto">
+                    </div>
+                    <div class="campo-form">
+                      <label>Categoría</label>
+                      <input type="text" id="inline-producto-categoria" placeholder="Ej: Torre, Tiny PC">
+                    </div>
+                    <div class="campo-form">
+                      <label>Precio referencia</label>
+                      <input type="number" id="inline-producto-precio" placeholder="0" min="0">
+                    </div>
+                  </div>
+                  <div class="form-cliente-inline-acciones">
+                    <button type="button" class="btn-guardar-cliente-inline" id="btn-guardar-producto-inline" onclick="guardarProductoInline()">
+                      <span class="material-icons" style="font-size:16px; vertical-align:middle;">save</span> Guardar producto
+                    </button>
+                    <button type="button" class="btn-cancelar-cliente-inline" onclick="toggleFormNuevoProductoInline()">Cancelar</button>
+                  </div>
+                  <div id="inline-producto-mensaje" class="inline-cliente-mensaje" style="display:none;"></div>
+                </div>
+                <!-- Campos para agregar ítem a la tabla -->
+                <div class="form-grid form-grid-items" style="margin-top:10px;">
+                  <input type="text" id="item-descripcion" placeholder="Descripción del producto">
+                  <input type="number" id="item-cantidad" placeholder="Cant" min="1" value="1">
+                  <input type="number" id="item-valor" placeholder="Valor unitario" min="0">
+                  <button class="btn-agregar-item" onclick="agregarItem()" title="Agregar ítem">
+                    <span class="material-icons">add_circle</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Tabla editable de ítems -->
+              <div style="overflow-x:auto;">
+                <table class="tabla-items" id="tabla-items">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Producto / Descripción</th>
+                      <th>Cant</th>
+                      <th>Valor Unit.</th>
+                      <th>Valor Total</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-items"></tbody>
+                  <tfoot>
+                    <tr>
+                      <td colspan="4" class="texto-derecha"><strong>TOTAL:</strong></td>
+                      <td id="total-items"><strong>$0</strong></td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+
+            <!-- Sección inferior: receptor y observaciones -->
+            <div class="doc-seccion">
+              <div class="form-grid">
+                <div class="campo-form">
+                  <label>Entregado a / Recibe</label>
+                  <input type="text" id="nueva-orden-receptor" placeholder="Nombre de quien recibe el equipo (opcional)">
+                </div>
+                <div class="campo-form">
+                  <label>Observaciones</label>
+                  <textarea id="nueva-orden-observaciones" rows="3" placeholder="Observaciones opcionales..."></textarea>
+                </div>
+              </div>
+            </div>
+
+            <!-- Botones de acción -->
+            <div class="doc-footer-acciones no-print">
+              <button class="btn-secundario btn-doc-cancelar" onclick="cancelarNuevaOrden()">
+                <span class="material-icons" style="font-size:16px; vertical-align:middle;">close</span> Cancelar
+              </button>
+              <button class="btn-principal btn-doc-guardar" onclick="guardarNuevaOrden()">
+                <span class="material-icons" style="font-size:16px; vertical-align:middle;">save</span> Guardar Orden
+              </button>
+            </div>
+
+          </div><!-- fin .pagina-documento -->
+        </div><!-- fin #modulo-nueva-orden -->
+
+        <!-- MÓDULO: VER / GESTIONAR ORDEN (página completa — reemplaza modal) -->
+        <div id="modulo-ver-orden" class="modulo oculto">
+          <!-- Encabezado de impresión PDF (oculto en pantalla) -->
+          <div class="print-header">
+            <img id="print-logo-img" src="" alt="Logo" class="print-logo-img">
+            <h1 id="print-nombre-comercial">Ventas Virtuales Colombia</h1>
+            <p id="print-direccion">Av 5 a # 23 D Norte - 66 Ctro Comercial Pasarela Local 2 - 107</p>
+            <p id="print-contacto">Cel: 3175591252 | rafyta1995@gmail.com</p>
+          </div>
+
+          <!-- Breadcrumb de navegación -->
+          <div class="breadcrumb no-print">
+            <span class="breadcrumb-link" onclick="regresarAOrdenes()">
+              <span class="material-icons breadcrumb-icon">receipt_long</span>Órdenes de Pedido
+            </span>
+            <span class="material-icons breadcrumb-sep">chevron_right</span>
+            <span class="breadcrumb-actual" id="ver-breadcrumb-op">Ver Orden</span>
+          </div>
+
+          <!-- Página de documento estilo contable -->
+          <div class="pagina-documento">
+
+            <!-- Datos de la orden (solo lectura) -->
+            <div class="doc-seccion">
+              <div class="doc-encabezado-grid">
+                <div class="campo-doc-readonly">
+                  <label class="doc-label">N° OP</label>
+                  <div class="doc-valor-readonly" id="ver-numero-op"></div>
+                </div>
+                <div class="campo-doc-readonly">
+                  <label class="doc-label">Fecha creación</label>
+                  <div class="doc-valor-readonly" id="ver-fecha"></div>
+                </div>
+                <div class="campo-doc-readonly">
+                  <label class="doc-label">Fecha préstamo</label>
+                  <div class="doc-valor-readonly" id="ver-fecha-prestamo"></div>
+                </div>
+                <div class="campo-doc-readonly">
+                  <label class="doc-label">Fecha límite</label>
+                  <div class="doc-valor-readonly texto-rojo" id="ver-fecha-limite"></div>
+                </div>
+                <div class="campo-doc-readonly">
+                  <label class="doc-label">Cliente / Local</label>
+                  <div class="doc-valor-readonly" id="ver-cliente"></div>
+                </div>
+                <div class="campo-doc-readonly">
+                  <label class="doc-label">Vendedor</label>
+                  <div class="doc-valor-readonly" id="ver-vendedor"></div>
+                </div>
+                <div class="campo-doc-readonly">
+                  <label class="doc-label">Local origen</label>
+                  <div class="doc-valor-readonly" id="ver-local"></div>
+                </div>
+                <div class="campo-doc-readonly">
+                  <label class="doc-label">Recibe equipo</label>
+                  <div class="doc-valor-readonly" id="ver-receptor"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tabla detalle de la orden -->
+            <div class="doc-seccion">
+              <div style="overflow-x:auto;">
+                <table class="tabla-principal tabla-detalle-orden">
+                  <thead>
+                    <tr>
+                      <th>Producto</th>
+                      <th>Descripción</th>
+                      <th>Cant</th>
+                      <th>Valor unit.</th>
+                      <th>Valor total</th>
+                      <th>Estado ítem</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-detalle-orden"></tbody>
+                  <tfoot>
+                    <tr>
+                      <td colspan="4" class="texto-derecha"><strong>TOTAL:</strong></td>
+                      <td id="ver-total-orden"><strong>$0</strong></td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              <div class="ver-observaciones" style="margin-top:16px;">
+                <strong>Observaciones:</strong> <span id="ver-observaciones"></span>
+              </div>
+            </div>
+
+            <!-- Sección de cambio de estado (oculta al imprimir) -->
+            <div class="doc-seccion seccion-cambio-estado no-print">
+              <h4>Actualizar estado de la orden</h4>
+              <div class="estado-actual-container">
+                <span>Estado actual:</span>
+                <span id="ver-estado-badge" class="badge"></span>
+              </div>
+              <!-- Campo receptor: visible solo al marcar como Prestado -->
+              <div id="campo-receptor-prestado" class="campo-form" style="display:none;">
+                <label>Nombre de quien recibe el equipo *</label>
+                <input type="text" id="ver-nombre-receptor" placeholder="Nombre completo de quien recibe">
+                <small style="color:#888;">Obligatorio para marcar como Prestado</small>
+              </div>
+              <div id="botones-transicion" class="botones-transicion"></div>
+              <div class="campo-form">
+                <label>Observaciones adicionales (opcional)</label>
+                <textarea id="ver-observaciones-cambio" rows="2" placeholder="Agregar nota al cambio de estado..."></textarea>
+              </div>
+            </div>
+
+            <!-- Botones de acción (ocultos al imprimir) -->
+            <div class="doc-footer-acciones no-print">
+              <button class="btn-secundario btn-doc-cancelar" onclick="regresarAOrdenes()">
+                <span class="material-icons" style="font-size:16px; vertical-align:middle;">arrow_back</span> Volver
+              </button>
+              <button class="btn-imprimir" onclick="imprimirOrden()">
+                <span class="material-icons">print</span> Imprimir PDF
+              </button>
+            </div>
+
+          </div><!-- fin .pagina-documento -->
+
+          <!-- Pie de página para impresión PDF (oculto en pantalla) -->
+          <div class="print-footer">
+            <p id="print-footer-fecha"></p>
+            <p id="print-footer-estado"></p>
+          </div>
+        </div><!-- fin #modulo-ver-orden -->
+
         <!-- MÓDULO: CONFIGURACIÓN (solo Super admin) -->
         <div id="modulo-configuracion" class="modulo oculto">
           <div class="seccion-header">
@@ -394,232 +692,9 @@
       </main>
 
       <!-- FAB: botón flotante para Nueva Orden (visible solo en móvil) -->
-      <button class="fab-nueva-orden" onclick="abrirModalNuevaOrden()" aria-label="Nueva Orden">
+      <button class="fab-nueva-orden" onclick="mostrarPaginaNuevaOrden()" aria-label="Nueva Orden">
         <span class="material-icons">add</span>
       </button>
-    </div>
-  </div>
-
-  <!-- ==================== MODAL: Nueva Orden ==================== -->
-  <div id="modal-nueva-orden" class="modal-overlay" style="display:none;">
-    <div class="modal-contenido modal-grande">
-      <div class="modal-header">
-        <h3>Nueva Orden de Pedido</h3>
-        <button class="btn-cerrar-modal" onclick="cerrarModal('modal-nueva-orden')">&times;</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-grid">
-          <div class="campo-form">
-            <label>Cliente / Local</label>
-            <input type="text" id="nueva-orden-cliente" placeholder="Buscar cliente..." list="lista-clientes" oninput="buscarClienteAutocomplete()">
-            <datalist id="lista-clientes"></datalist>
-            <input type="hidden" id="nueva-orden-id-cliente">
-            <!-- Enlace para crear cliente nuevo inline -->
-            <a href="javascript:void(0)" id="btn-toggle-nuevo-cliente" class="enlace-nuevo-cliente" onclick="toggleFormNuevoClienteInline()">
-              <span class="material-icons" style="font-size:16px; vertical-align:middle;">add</span> Crear nuevo cliente
-            </a>
-            <!-- Mini-formulario inline para crear cliente -->
-            <div id="form-nuevo-cliente-inline" class="form-cliente-inline" style="display:none;">
-              <div class="form-cliente-inline-grid">
-                <div class="campo-form">
-                  <label>Nombre del local *</label>
-                  <input type="text" id="inline-cliente-nombre" placeholder="Nombre del local">
-                </div>
-                <div class="campo-form">
-                  <label>Contacto</label>
-                  <input type="text" id="inline-cliente-contacto" placeholder="Persona de contacto">
-                </div>
-                <div class="campo-form">
-                  <label>Teléfono</label>
-                  <input type="tel" id="inline-cliente-telefono" placeholder="Teléfono">
-                </div>
-                <div class="campo-form">
-                  <label>Ciudad</label>
-                  <input type="text" id="inline-cliente-ciudad" placeholder="Ciudad" value="Cali">
-                </div>
-              </div>
-              <div class="form-cliente-inline-acciones">
-                <button type="button" class="btn-guardar-cliente-inline" onclick="guardarClienteInline()">
-                  <span class="material-icons" style="font-size:16px; vertical-align:middle;">save</span> Guardar cliente
-                </button>
-                <button type="button" class="btn-cancelar-cliente-inline" onclick="toggleFormNuevoClienteInline()">Cancelar</button>
-              </div>
-              <div id="inline-cliente-mensaje" class="inline-cliente-mensaje" style="display:none;"></div>
-            </div>
-          </div>
-          <div class="campo-form">
-            <label>Local de origen</label>
-            <input type="text" id="nueva-orden-local" placeholder="Local de origen">
-          </div>
-        </div>
-
-        <h4>Productos / Ítems</h4>
-        <div class="items-agregar">
-          <!-- Buscador de productos con autocomplete -->
-          <div class="campo-form" style="margin-bottom:8px; position:relative;">
-            <input type="text" id="item-buscar-producto" placeholder="Buscar producto existente..." oninput="buscarProductoAutocomplete()" autocomplete="off">
-            <div id="dropdown-productos" class="dropdown-autocomplete" style="display:none;"></div>
-          </div>
-          <!-- Enlace para crear producto nuevo inline -->
-          <a href="javascript:void(0)" id="btn-toggle-nuevo-producto-inline" class="enlace-nuevo-cliente" onclick="toggleFormNuevoProductoInline()" style="margin-bottom:10px;">
-            <span class="material-icons" style="font-size:16px; vertical-align:middle;">add</span> Crear nuevo producto
-          </a>
-          <!-- Mini-formulario inline para crear producto -->
-          <div id="form-nuevo-producto-inline" class="form-cliente-inline" style="display:none;">
-            <div class="form-cliente-inline-grid">
-              <div class="campo-form">
-                <label>Nombre del producto *</label>
-                <input type="text" id="inline-producto-nombre" placeholder="Nombre del producto">
-              </div>
-              <div class="campo-form">
-                <label>Categoría</label>
-                <input type="text" id="inline-producto-categoria" placeholder="Ej: Torre, Tiny PC">
-              </div>
-              <div class="campo-form">
-                <label>Precio referencia</label>
-                <input type="number" id="inline-producto-precio" placeholder="0" min="0">
-              </div>
-            </div>
-            <div class="form-cliente-inline-acciones">
-              <button type="button" class="btn-guardar-cliente-inline" id="btn-guardar-producto-inline" onclick="guardarProductoInline()">
-                <span class="material-icons" style="font-size:16px; vertical-align:middle;">save</span> Guardar producto
-              </button>
-              <button type="button" class="btn-cancelar-cliente-inline" onclick="toggleFormNuevoProductoInline()">Cancelar</button>
-            </div>
-            <div id="inline-producto-mensaje" class="inline-cliente-mensaje" style="display:none;"></div>
-          </div>
-          <!-- Campos de ítem -->
-          <div class="form-grid form-grid-items" style="margin-top:10px;">
-            <input type="text" id="item-descripcion" placeholder="Descripción del producto">
-            <input type="number" id="item-cantidad" placeholder="Cant" min="1" value="1">
-            <input type="number" id="item-valor" placeholder="Valor unitario" min="0">
-            <button class="btn-agregar-item" onclick="agregarItem()">
-              <span class="material-icons">add_circle</span>
-            </button>
-          </div>
-        </div>
-
-        <table class="tabla-items" id="tabla-items">
-          <thead>
-            <tr>
-              <th>Descripción</th>
-              <th>Cant</th>
-              <th>Valor unit.</th>
-              <th>Subtotal</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="tbody-items"></tbody>
-          <tfoot>
-            <tr>
-              <td colspan="3" class="texto-derecha"><strong>TOTAL:</strong></td>
-              <td id="total-items"><strong>$0</strong></td>
-              <td></td>
-            </tr>
-          </tfoot>
-        </table>
-
-        <div class="form-grid">
-          <div class="campo-form">
-            <label>Entregado a / Recibe</label>
-            <input type="text" id="nueva-orden-receptor" placeholder="Nombre de quien recibe el equipo (opcional)">
-          </div>
-          <div class="campo-form">
-            <label>Observaciones</label>
-            <textarea id="nueva-orden-observaciones" rows="2" placeholder="Observaciones opcionales..."></textarea>
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-secundario" onclick="cerrarModal('modal-nueva-orden')">Cancelar</button>
-        <button class="btn-principal" onclick="guardarNuevaOrden()">Guardar Orden</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ==================== MODAL: Ver / Gestionar Orden ==================== -->
-  <div id="modal-ver-orden" class="modal-overlay" style="display:none;">
-    <div class="modal-contenido modal-grande">
-      <!-- Encabezado para impresión PDF (oculto en pantalla) -->
-      <div class="print-header">
-        <img id="print-logo-img" src="" alt="Logo" class="print-logo-img">
-        <h1 id="print-nombre-comercial">Ventas Virtuales Colombia</h1>
-        <p id="print-direccion">Av 5 a # 23 D Norte - 66 Ctro Comercial Pasarela Local 2 - 107</p>
-        <p id="print-contacto">Cel: 3175591252 | rafyta1995@gmail.com</p>
-      </div>
-      <div class="modal-header">
-        <h3 id="modal-titulo-op">Orden OP-...</h3>
-        <button class="btn-cerrar-modal" onclick="cerrarModal('modal-ver-orden')">&times;</button>
-      </div>
-      <div class="modal-body">
-        <!-- Datos de la orden (solo lectura) -->
-        <div class="datos-orden-grid">
-          <div><strong>N° OP:</strong> <span id="ver-numero-op"></span></div>
-          <div><strong>Fecha creación:</strong> <span id="ver-fecha"></span></div>
-          <div><strong>Fecha préstamo:</strong> <span id="ver-fecha-prestamo"></span></div>
-          <div><strong>Fecha límite:</strong> <span id="ver-fecha-limite" class="texto-rojo"></span></div>
-          <div><strong>Cliente:</strong> <span id="ver-cliente"></span></div>
-          <div><strong>Vendedor:</strong> <span id="ver-vendedor"></span></div>
-          <div><strong>Local origen:</strong> <span id="ver-local"></span></div>
-          <div><strong>Recibe equipo:</strong> <span id="ver-receptor"></span></div>
-        </div>
-
-        <table class="tabla-principal tabla-detalle-orden">
-          <thead>
-            <tr>
-              <th>Producto</th>
-              <th>Descripción</th>
-              <th>Cant</th>
-              <th>Valor unit.</th>
-              <th>Valor total</th>
-              <th>Estado ítem</th>
-            </tr>
-          </thead>
-          <tbody id="tbody-detalle-orden"></tbody>
-          <tfoot>
-            <tr>
-              <td colspan="4" class="texto-derecha"><strong>TOTAL:</strong></td>
-              <td id="ver-total-orden"><strong>$0</strong></td>
-              <td></td>
-            </tr>
-          </tfoot>
-        </table>
-
-        <div class="ver-observaciones">
-          <strong>Observaciones:</strong> <span id="ver-observaciones"></span>
-        </div>
-
-        <!-- Cambio de estado -->
-        <div class="seccion-cambio-estado">
-          <h4>Actualizar estado de la orden</h4>
-          <div class="estado-actual-container">
-            <span>Estado actual:</span>
-            <span id="ver-estado-badge" class="badge"></span>
-          </div>
-          <!-- Campo receptor: visible solo al marcar como Prestado -->
-          <div id="campo-receptor-prestado" class="campo-form" style="display:none;">
-            <label>Nombre de quien recibe el equipo *</label>
-            <input type="text" id="ver-nombre-receptor" placeholder="Nombre completo de quien recibe">
-            <small style="color:#888;">Obligatorio para marcar como Prestado</small>
-          </div>
-          <div id="botones-transicion" class="botones-transicion"></div>
-          <div class="campo-form">
-            <label>Observaciones adicionales (opcional)</label>
-            <textarea id="ver-observaciones-cambio" rows="2" placeholder="Agregar nota al cambio de estado..."></textarea>
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-secundario" onclick="cerrarModal('modal-ver-orden')">Cerrar</button>
-        <button class="btn-imprimir" onclick="imprimirOrden()">
-          <span class="material-icons">print</span> Imprimir PDF
-        </button>
-      </div>
-      <!-- Pie de página para impresión PDF (oculto en pantalla) -->
-      <div class="print-footer">
-        <p id="print-footer-fecha"></p>
-        <p id="print-footer-estado"></p>
-      </div>
     </div>
   </div>
 
