@@ -12,6 +12,7 @@ var clientesCache = [];
 var productosCache = [];
 var itemsNuevaOrden = [];
 var ordenSeleccionada = null;
+var detalleOrdenActual = []; // Detalle de productos de la orden en vista
 var filtroEstadoActual = null;
 var itemProductoSeleccionado = ''; // id_producto del autocomplete (vacío si texto libre)
 window.appConfig = {}; // Configuración global del negocio
@@ -608,6 +609,8 @@ function verOrden(idOp) {
 }
 
 function renderizarDetalleOrden(detalle) {
+  // Guardar detalle para uso en impresión
+  detalleOrdenActual = detalle || [];
   var tbody = document.getElementById('tbody-detalle-orden');
   var totalOrden = 0;
 
@@ -1668,6 +1671,194 @@ function descargarExcel() {
       alert('Error: ' + error.message);
     })
     .generarReporteExcel(filtros);
+}
+
+// ==================== REMISIÓN EN NUEVA PESTAÑA ====================
+// Genera un documento HTML tipo remisión y lo abre en una nueva pestaña
+// para imprimir o guardar como PDF con Ctrl+P del navegador.
+function imprimirRemision() {
+  if (!ordenSeleccionada) return;
+
+  var orden = ordenSeleccionada;
+  var detalle = detalleOrdenActual;
+
+  // Calcular total general
+  var totalGeneral = 0;
+  for (var i = 0; i < detalle.length; i++) {
+    totalGeneral += detalle[i].valor_total || 0;
+  }
+
+  // Fecha y hora de impresión
+  var ahora = new Date();
+  var fechaImpresion = ahora.toLocaleDateString('es-CO', {
+    day: '2-digit', month: '2-digit', year: 'numeric'
+  }) + ' ' + ahora.toLocaleTimeString('es-CO', {
+    hour: '2-digit', minute: '2-digit'
+  });
+
+  // Formatear moneda colombiana sin decimales
+  function fmt(num) {
+    return '$' + Number(num).toLocaleString('es-CO', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    });
+  }
+
+  // Escapar texto para prevenir XSS en el HTML generado
+  function esc(str) {
+    return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // Construir filas de la tabla de productos
+  var filasProductos = '';
+  if (detalle.length === 0) {
+    filasProductos = '<tr><td colspan="5" style="text-align:center; color:#666; padding:12px;">Sin productos registrados</td></tr>';
+  } else {
+    for (var j = 0; j < detalle.length; j++) {
+      var d = detalle[j];
+      filasProductos +=
+        '<tr>' +
+          '<td style="text-align:center;">' + (j + 1) + '</td>' +
+          '<td>' + esc(d.descripcion_libre) + '</td>' +
+          '<td style="text-align:center;">' + esc(d.cantidad) + '</td>' +
+          '<td style="text-align:right;">' + fmt(d.valor_unitario) + '</td>' +
+          '<td style="text-align:right;">' + fmt(d.valor_total) + '</td>' +
+        '</tr>';
+    }
+  }
+
+  // Construir HTML completo del documento
+  var html = '<!DOCTYPE html>' +
+    '<html lang="es">' +
+    '<head>' +
+      '<meta charset="UTF-8">' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+      '<title>Remisión ' + esc(orden.numero_op) + '</title>' +
+      '<style>' +
+        /* Configuración de página para impresión */
+        '@page { size: letter; margin: 15mm; }' +
+        'body { font-family: Arial, sans-serif; font-size: 13px; color: #000; background: #fff; margin: 0; padding: 20px; }' +
+        /* Encabezado */
+        '.doc-header { text-align: center; margin-bottom: 20px; }' +
+        '.doc-header h1 { font-size: 28px; font-weight: bold; letter-spacing: 4px; margin: 0 0 6px 0; }' +
+        '.doc-header h2 { font-size: 16px; font-weight: bold; margin: 0 0 4px 0; }' +
+        '.doc-header p { font-size: 13px; margin: 0; color: #333; }' +
+        'hr { border: none; border-top: 2px solid #000; margin: 16px 0; }' +
+        /* Grid de datos de la orden */
+        '.datos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; margin-bottom: 20px; padding: 12px; border: 1px solid #ccc; border-radius: 4px; }' +
+        '.dato-campo { display: flex; flex-direction: column; }' +
+        '.dato-campo label { font-size: 10px; font-weight: bold; text-transform: uppercase; color: #555; margin-bottom: 2px; }' +
+        '.dato-campo span { font-size: 13px; color: #000; }' +
+        /* Tabla de productos */
+        'table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }' +
+        'thead th { background: #f0f0f0; font-weight: bold; padding: 8px 6px; border: 1px solid #999; font-size: 12px; }' +
+        'tbody td { padding: 7px 6px; border: 1px solid #ccc; font-size: 13px; }' +
+        'tbody tr:nth-child(even) { background: #fafafa; }' +
+        '.fila-total { border-top: 2px solid #000; }' +
+        '.fila-total td { padding: 8px 6px; font-weight: bold; font-size: 14px; border: none; }' +
+        /* Observaciones */
+        '.observaciones { margin-bottom: 28px; }' +
+        '.observaciones strong { font-size: 13px; display: block; margin-bottom: 4px; }' +
+        '.observaciones p { margin: 0; color: #333; }' +
+        /* Bloque de firmas */
+        '.firmas { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 40px; margin-bottom: 16px; }' +
+        '.firma-bloque { text-align: center; }' +
+        '.firma-linea { border-top: 1px solid #000; margin: 0 20px 6px 20px; padding-top: 6px; font-size: 13px; font-weight: bold; }' +
+        /* Pie de página */
+        '.pie-impresion { font-size: 10px; color: #888; text-align: center; margin-top: 20px; border-top: 1px solid #eee; padding-top: 8px; }' +
+        /* Botón imprimir (solo en pantalla) */
+        '.btn-imprimir-remision { display: block; margin: 0 auto 24px auto; padding: 12px 32px; background: #ffcf22; color: #1a1a1a; border: none; border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer; }' +
+        '.btn-imprimir-remision:hover { background: #f0c000; }' +
+        '@media print { .no-print { display: none !important; } body { padding: 0; } }' +
+      '</style>' +
+    '</head>' +
+    '<body>' +
+
+      /* Botón imprimir visible solo en pantalla */
+      '<div class="no-print" style="text-align:center; margin-bottom:24px;">' +
+        '<button class="btn-imprimir-remision" onclick="window.print()">🖨 Imprimir / Guardar PDF</button>' +
+      '</div>' +
+
+      /* Encabezado del documento */
+      '<div class="doc-header">' +
+        '<h1>REMISIÓN</h1>' +
+        '<h2>' + esc(orden.numero_op) + '</h2>' +
+        '<p>Fecha de creación: ' + esc(orden.fecha) + '</p>' +
+      '</div>' +
+      '<hr>' +
+
+      /* Datos de la orden en grid 2 columnas */
+      '<div class="datos-grid">' +
+        '<div class="dato-campo">' +
+          '<label>Cliente / Local</label>' +
+          '<span>' + esc(orden.nombre_cliente || '—') + '</span>' +
+        '</div>' +
+        '<div class="dato-campo">' +
+          '<label>Local de origen</label>' +
+          '<span>' + esc(orden.local_origen || '—') + '</span>' +
+        '</div>' +
+        '<div class="dato-campo">' +
+          '<label>Recibe equipo</label>' +
+          '<span>' + esc(orden.nombre_receptor || '—') + '</span>' +
+        '</div>' +
+        '<div class="dato-campo">' +
+          '<label>Estado</label>' +
+          '<span>' + esc(orden.estado || '—') + '</span>' +
+        '</div>' +
+      '</div>' +
+
+      /* Tabla de productos */
+      '<table>' +
+        '<thead>' +
+          '<tr>' +
+            '<th style="width:40px;">#</th>' +
+            '<th style="text-align:left;">Descripción</th>' +
+            '<th style="width:60px;">Cant</th>' +
+            '<th style="width:110px; text-align:right;">Valor Unit.</th>' +
+            '<th style="width:110px; text-align:right;">Valor Total</th>' +
+          '</tr>' +
+        '</thead>' +
+        '<tbody>' + filasProductos + '</tbody>' +
+        '<tfoot>' +
+          '<tr class="fila-total">' +
+            '<td colspan="3"></td>' +
+            '<td style="text-align:right;">TOTAL:</td>' +
+            '<td style="text-align:right;">' + fmt(totalGeneral) + '</td>' +
+          '</tr>' +
+        '</tfoot>' +
+      '</table>' +
+
+      /* Observaciones */
+      '<div class="observaciones">' +
+        '<strong>Observaciones:</strong>' +
+        '<p>' + esc(orden.observaciones || 'Sin observaciones') + '</p>' +
+      '</div>' +
+
+      /* Firmas */
+      '<div class="firmas">' +
+        '<div class="firma-bloque">' +
+          '<div style="height:50px;"></div>' +
+          '<div class="firma-linea">Entrega: ________________________</div>' +
+        '</div>' +
+        '<div class="firma-bloque">' +
+          '<div style="height:50px;"></div>' +
+          '<div class="firma-linea">Recibe: ________________________</div>' +
+        '</div>' +
+      '</div>' +
+
+      /* Pie de fecha de impresión */
+      '<p class="pie-impresion">Impreso el: ' + fechaImpresion + '</p>' +
+
+    '</body></html>';
+
+  // Abrir nueva pestaña y escribir el HTML
+  var nuevaVentana = window.open('', '_blank');
+  if (nuevaVentana) {
+    nuevaVentana.document.write(html);
+    nuevaVentana.document.close();
+  } else {
+    alert('El navegador bloqueó la nueva pestaña. Permite ventanas emergentes para este sitio.');
+  }
 }
 
 // ==================== IMPRESIÓN PDF ====================
