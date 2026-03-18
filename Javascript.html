@@ -12,7 +12,10 @@ var clientesCache = [];
 var productosCache = [];
 var itemsNuevaOrden = [];
 var ordenSeleccionada = null;
+var detalleOrdenActual = []; // Detalle de productos de la orden en vista
 var filtroEstadoActual = null;
+// Parámetros de consecutivo — se gestionan en sección propia, NO en la tabla general de config
+var PARAMS_CONSECUTIVO = ['consecutivo_inicio', 'consecutivo_fin', 'consecutivo_actual'];
 var itemProductoSeleccionado = ''; // id_producto del autocomplete (vacío si texto libre)
 window.appConfig = {}; // Configuración global del negocio
 
@@ -212,49 +215,58 @@ var TITULOS_MODULO = {
   productos: 'Productos',
   usuarios: 'Gestión de Usuarios',
   reportes: 'Reportes',
-  configuracion: 'Configuración'
+  configuracion: 'Configuración',
+  'nueva-orden': 'Nueva Orden de Pedido',
+  'ver-orden': 'Ver / Gestionar Orden'
 };
+
+// Submódulos: no actualizan el nav activo ni recargan datos
+var MODULOS_SUB = ['nueva-orden', 'ver-orden'];
 
 // Cambiar módulo activo (reemplaza cambiarTab)
 function mostrarModulo(nombreModulo) {
-  // 1. Quitar clase 'activo' de todos los nav-item
-  var navItems = document.querySelectorAll('.sidebar-nav .nav-item');
-  for (var i = 0; i < navItems.length; i++) {
-    navItems[i].classList.remove('activo');
+  var esSubmodulo = MODULOS_SUB.indexOf(nombreModulo) !== -1;
+
+  // 1. Actualizar nav activo solo en módulos principales
+  if (!esSubmodulo) {
+    var navItems = document.querySelectorAll('.sidebar-nav .nav-item');
+    for (var i = 0; i < navItems.length; i++) {
+      navItems[i].classList.remove('activo');
+    }
+    var navActivo = document.querySelector('.nav-item[data-modulo="' + nombreModulo + '"]');
+    if (navActivo) navActivo.classList.add('activo');
   }
 
-  // 2. Agregar clase 'activo' al nav-item correspondiente
-  var navActivo = document.querySelector('.nav-item[data-modulo="' + nombreModulo + '"]');
-  if (navActivo) navActivo.classList.add('activo');
-
-  // 3. Ocultar todos los módulos
+  // 2. Ocultar todos los módulos
   var modulos = document.querySelectorAll('.modulo');
   for (var j = 0; j < modulos.length; j++) {
     modulos[j].classList.add('oculto');
   }
 
-  // 4. Mostrar el módulo seleccionado
+  // 3. Mostrar el módulo seleccionado
   var moduloActivo = document.getElementById('modulo-' + nombreModulo);
   if (moduloActivo) moduloActivo.classList.remove('oculto');
 
-  // 5. Actualizar título del topbar
+  // 4. Actualizar título del topbar
   var titulo = TITULOS_MODULO[nombreModulo] || nombreModulo;
   document.getElementById('titulo-modulo').textContent = titulo;
 
-  // 6. Mostrar u ocultar botón Nueva Orden (solo en módulo órdenes)
+  // 5. Mostrar/ocultar botón Nueva Orden (solo en módulo órdenes)
   var btnNueva = document.getElementById('btn-nueva-orden-topbar');
   if (btnNueva) {
     btnNueva.style.display = (nombreModulo === 'ordenes') ? 'flex' : 'none';
   }
 
-  // 7. Cargar datos según módulo
-  if (nombreModulo === 'ordenes') { cargarOrdenes(); cargarContadores(); }
-  if (nombreModulo === 'clientes') cargarClientes();
-  if (nombreModulo === 'productos') cargarProductos();
-  if (nombreModulo === 'usuarios') cargarUsuarios();
-  if (nombreModulo === 'configuracion') cargarConfiguracion();
+  // 6. Cargar datos según módulo (no para submódulos)
+  if (!esSubmodulo) {
+    if (nombreModulo === 'ordenes') { cargarOrdenes(); cargarContadores(); }
+    if (nombreModulo === 'clientes') cargarClientes();
+    if (nombreModulo === 'productos') cargarProductos();
+    if (nombreModulo === 'usuarios') cargarUsuarios();
+    if (nombreModulo === 'configuracion') cargarConfiguracion();
+  }
 
-  // 8. Cerrar sidebar en mobile al seleccionar módulo
+  // 7. Cerrar sidebar en mobile al navegar
   cerrarSidebarMobile();
 }
 
@@ -561,21 +573,23 @@ function verOrden(idOp) {
   if (!orden) return;
   ordenSeleccionada = orden;
 
-  // Llenar datos del modal
-  document.getElementById('modal-titulo-op').textContent = 'Orden ' + orden.numero_op;
-  document.getElementById('ver-numero-op').textContent = orden.numero_op;
-  document.getElementById('ver-fecha').textContent = orden.fecha;
+  // Llenar datos de la página de ver/gestionar
+  var numOp = orden.numero_op || '—';
+  document.getElementById('ver-breadcrumb-op').textContent = numOp;
+  document.getElementById('ver-numero-op').textContent = numOp;
+  document.getElementById('ver-fecha').textContent = orden.fecha || '—';
   document.getElementById('ver-fecha-prestamo').textContent = orden.fecha_prestamo || '—';
   document.getElementById('ver-fecha-limite').textContent = orden.fecha_limite_devolucion || '—';
-  document.getElementById('ver-cliente').textContent = orden.nombre_cliente;
-  document.getElementById('ver-vendedor').textContent = orden.nombre_vendedor;
-  document.getElementById('ver-local').textContent = orden.local_origen;
+  document.getElementById('ver-cliente').textContent = orden.nombre_cliente || '—';
+  document.getElementById('ver-vendedor').textContent = orden.nombre_vendedor || '—';
+  document.getElementById('ver-local').textContent = orden.local_origen || '—';
   document.getElementById('ver-receptor').textContent = orden.nombre_receptor || '—';
   document.getElementById('ver-observaciones').textContent = orden.observaciones || 'Sin observaciones';
 
   // Resetear campo de receptor para transición
   document.getElementById('ver-nombre-receptor').value = '';
   document.getElementById('campo-receptor-prestado').style.display = 'none';
+  document.getElementById('ver-observaciones-cambio').value = '';
 
   // Badge de estado
   var badgeEstado = document.getElementById('ver-estado-badge');
@@ -592,11 +606,13 @@ function verOrden(idOp) {
   // Generar botones de transición según estado
   generarBotonesTransicion(orden.estado, idOp);
 
-  // Mostrar modal
-  document.getElementById('modal-ver-orden').style.display = 'flex';
+  // Navegar a la página de ver/gestionar (reemplaza apertura de modal)
+  mostrarModulo('ver-orden');
 }
 
 function renderizarDetalleOrden(detalle) {
+  // Guardar detalle para uso en impresión
+  detalleOrdenActual = detalle || [];
   var tbody = document.getElementById('tbody-detalle-orden');
   var totalOrden = 0;
 
@@ -668,10 +684,10 @@ function cambiarEstado(idOp, nuevoEstado) {
   google.script.run
     .withSuccessHandler(function(resultado) {
       if (resultado.success) {
-        alert('Estado actualizado a: ' + nuevoEstado);
-        cerrarModal('modal-ver-orden');
+        mostrarNotificacion('Estado actualizado a: ' + nuevoEstado, 'exito');
         cargarOrdenes();
         cargarContadores();
+        regresarAOrdenes();
       } else {
         alert('Error: ' + resultado.mensaje);
       }
@@ -682,8 +698,11 @@ function cambiarEstado(idOp, nuevoEstado) {
     .actualizarEstadoOrden(idOp, nuevoEstado, observaciones, nombreReceptor);
 }
 
-// ==================== NUEVA ORDEN ====================
-function abrirModalNuevaOrden() {
+// ==================== NUEVA ORDEN — PÁGINA COMPLETA ====================
+
+// Navegar a la página de nueva orden (reemplaza el modal)
+function mostrarPaginaNuevaOrden() {
+  // Limpiar estado del formulario
   itemsNuevaOrden = [];
   document.getElementById('nueva-orden-cliente').value = '';
   document.getElementById('nueva-orden-id-cliente').value = '';
@@ -695,12 +714,17 @@ function abrirModalNuevaOrden() {
   document.getElementById('item-valor').value = '';
   renderizarItemsNuevaOrden();
 
+  // Mostrar fecha actual en el campo de solo lectura
+  var hoy = new Date();
+  var fechaStr = hoy.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  document.getElementById('nueva-orden-fecha-display').textContent = fechaStr;
+
   // Resetear formulario inline de nuevo cliente
   document.getElementById('form-nuevo-cliente-inline').style.display = 'none';
   document.getElementById('btn-toggle-nuevo-cliente').style.display = 'inline-flex';
   limpiarFormClienteInline();
 
-  // Resetear buscador de productos, selección y formulario inline de producto
+  // Resetear buscador de productos y formulario inline de producto
   itemProductoSeleccionado = '';
   document.getElementById('item-buscar-producto').value = '';
   document.getElementById('dropdown-productos').style.display = 'none';
@@ -711,7 +735,41 @@ function abrirModalNuevaOrden() {
   // Cargar lista de clientes para autocomplete
   cargarClientesAutocomplete();
 
-  document.getElementById('modal-nueva-orden').style.display = 'flex';
+  // Verificar disponibilidad de consecutivos y alertar si quedan pocos
+  google.script.run
+    .withSuccessHandler(function(info) {
+      if (info.disponibles <= 0) {
+        mostrarNotificacion('Sin consecutivos disponibles. Contacte al administrador.', 'error');
+      } else if (info.disponibles <= 20) {
+        mostrarNotificacion('Atención: Quedan solo ' + info.disponibles + ' consecutivos disponibles.', 'advertencia');
+      }
+    })
+    .obtenerInfoConsecutivo();
+
+  // Navegar a la página de nueva orden
+  mostrarModulo('nueva-orden');
+}
+
+// Alias para compatibilidad con código existente
+function abrirModalNuevaOrden() {
+  mostrarPaginaNuevaOrden();
+}
+
+// Regresar al listado de órdenes desde cualquier subpágina
+function regresarAOrdenes() {
+  mostrarModulo('ordenes');
+}
+
+// Cancelar creación de nueva orden (pide confirmación si hay datos)
+function cancelarNuevaOrden() {
+  var tieneCliente = document.getElementById('nueva-orden-cliente').value.trim();
+  var tieneItems = itemsNuevaOrden.length > 0;
+  var tieneObs = document.getElementById('nueva-orden-observaciones').value.trim();
+
+  if (tieneCliente || tieneItems || tieneObs) {
+    if (!confirm('¿Desea salir sin guardar? Se perderán los datos ingresados.')) return;
+  }
+  regresarAOrdenes();
 }
 
 function cargarClientesAutocomplete() {
@@ -781,7 +839,7 @@ function renderizarItemsNuevaOrden() {
   var total = 0;
 
   if (itemsNuevaOrden.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="sin-datos">Agregue productos a la orden</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="sin-datos">Agregue productos a la orden</td></tr>';
     document.getElementById('total-items').innerHTML = '<strong>$0</strong>';
     return;
   }
@@ -792,17 +850,18 @@ function renderizarItemsNuevaOrden() {
     total += item.valor_total;
 
     html += '<tr>' +
+      '<td style="color:#888; font-size:12px;">' + (i + 1) + '</td>' +
       '<td>' + item.descripcion_libre + '</td>' +
       '<td>' + item.cantidad + '</td>' +
-      '<td>$' + formatearNumero(item.valor_unitario) + '</td>' +
-      '<td>$' + formatearNumero(item.valor_total) + '</td>' +
-      '<td><button class="btn-eliminar-item" onclick="eliminarItem(' + i + ')">' +
+      '<td>' + formatearMoneda(item.valor_unitario) + '</td>' +
+      '<td><strong>' + formatearMoneda(item.valor_total) + '</strong></td>' +
+      '<td><button class="btn-eliminar-item" onclick="eliminarItem(' + i + ')" title="Eliminar ítem">' +
       '<span class="material-icons">delete</span></button></td>' +
       '</tr>';
   }
 
   tbody.innerHTML = html;
-  document.getElementById('total-items').innerHTML = '<strong>$' + formatearNumero(total) + '</strong>';
+  document.getElementById('total-items').innerHTML = '<strong>' + formatearMoneda(total) + '</strong>';
 }
 
 function guardarNuevaOrden() {
@@ -832,12 +891,16 @@ function guardarNuevaOrden() {
   google.script.run
     .withSuccessHandler(function(resultado) {
       if (resultado.success) {
-        alert('Orden creada: ' + resultado.numero_op);
-        cerrarModal('modal-nueva-orden');
+        mostrarNotificacion('Orden creada: ' + resultado.numero_op, 'exito');
         cargarOrdenes();
         cargarContadores();
+        regresarAOrdenes();
       } else {
-        alert('Error al crear la orden');
+        // Mostrar el error específico (ej: rango de consecutivos agotado)
+        var msg = resultado.error || 'Error al crear la orden.';
+        // Quitar prefijo técnico antes de mostrar al usuario
+        msg = msg.replace('RANGO_AGOTADO: ', '');
+        alert(msg);
       }
     })
     .withFailureHandler(function(error) {
@@ -1627,6 +1690,194 @@ function descargarExcel() {
     .generarReporteExcel(filtros);
 }
 
+// ==================== REMISIÓN EN NUEVA PESTAÑA ====================
+// Genera un documento HTML tipo remisión y lo abre en una nueva pestaña
+// para imprimir o guardar como PDF con Ctrl+P del navegador.
+function imprimirRemision() {
+  if (!ordenSeleccionada) return;
+
+  var orden = ordenSeleccionada;
+  var detalle = detalleOrdenActual;
+
+  // Calcular total general
+  var totalGeneral = 0;
+  for (var i = 0; i < detalle.length; i++) {
+    totalGeneral += detalle[i].valor_total || 0;
+  }
+
+  // Fecha y hora de impresión
+  var ahora = new Date();
+  var fechaImpresion = ahora.toLocaleDateString('es-CO', {
+    day: '2-digit', month: '2-digit', year: 'numeric'
+  }) + ' ' + ahora.toLocaleTimeString('es-CO', {
+    hour: '2-digit', minute: '2-digit'
+  });
+
+  // Formatear moneda colombiana sin decimales
+  function fmt(num) {
+    return '$' + Number(num).toLocaleString('es-CO', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    });
+  }
+
+  // Escapar texto para prevenir XSS en el HTML generado
+  function esc(str) {
+    return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // Construir filas de la tabla de productos
+  var filasProductos = '';
+  if (detalle.length === 0) {
+    filasProductos = '<tr><td colspan="5" style="text-align:center; color:#666; padding:12px;">Sin productos registrados</td></tr>';
+  } else {
+    for (var j = 0; j < detalle.length; j++) {
+      var d = detalle[j];
+      filasProductos +=
+        '<tr>' +
+          '<td style="text-align:center;">' + (j + 1) + '</td>' +
+          '<td>' + esc(d.descripcion_libre) + '</td>' +
+          '<td style="text-align:center;">' + esc(d.cantidad) + '</td>' +
+          '<td style="text-align:right;">' + fmt(d.valor_unitario) + '</td>' +
+          '<td style="text-align:right;">' + fmt(d.valor_total) + '</td>' +
+        '</tr>';
+    }
+  }
+
+  // Construir HTML completo del documento
+  var html = '<!DOCTYPE html>' +
+    '<html lang="es">' +
+    '<head>' +
+      '<meta charset="UTF-8">' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+      '<title>Remisión ' + esc(orden.numero_op) + '</title>' +
+      '<style>' +
+        /* Configuración de página para impresión */
+        '@page { size: letter; margin: 15mm; }' +
+        'body { font-family: Arial, sans-serif; font-size: 13px; color: #000; background: #fff; margin: 0; padding: 20px; }' +
+        /* Encabezado */
+        '.doc-header { text-align: center; margin-bottom: 20px; }' +
+        '.doc-header h1 { font-size: 28px; font-weight: bold; letter-spacing: 4px; margin: 0 0 6px 0; }' +
+        '.doc-header h2 { font-size: 16px; font-weight: bold; margin: 0 0 4px 0; }' +
+        '.doc-header p { font-size: 13px; margin: 0; color: #333; }' +
+        'hr { border: none; border-top: 2px solid #000; margin: 16px 0; }' +
+        /* Grid de datos de la orden */
+        '.datos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; margin-bottom: 20px; padding: 12px; border: 1px solid #ccc; border-radius: 4px; }' +
+        '.dato-campo { display: flex; flex-direction: column; }' +
+        '.dato-campo label { font-size: 10px; font-weight: bold; text-transform: uppercase; color: #555; margin-bottom: 2px; }' +
+        '.dato-campo span { font-size: 13px; color: #000; }' +
+        /* Tabla de productos */
+        'table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }' +
+        'thead th { background: #f0f0f0; font-weight: bold; padding: 8px 6px; border: 1px solid #999; font-size: 12px; }' +
+        'tbody td { padding: 7px 6px; border: 1px solid #ccc; font-size: 13px; }' +
+        'tbody tr:nth-child(even) { background: #fafafa; }' +
+        '.fila-total { border-top: 2px solid #000; }' +
+        '.fila-total td { padding: 8px 6px; font-weight: bold; font-size: 14px; border: none; }' +
+        /* Observaciones */
+        '.observaciones { margin-bottom: 28px; }' +
+        '.observaciones strong { font-size: 13px; display: block; margin-bottom: 4px; }' +
+        '.observaciones p { margin: 0; color: #333; }' +
+        /* Bloque de firmas */
+        '.firmas { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 40px; margin-bottom: 16px; }' +
+        '.firma-bloque { text-align: center; }' +
+        '.firma-linea { border-top: 1px solid #000; margin: 0 20px 6px 20px; padding-top: 6px; font-size: 13px; font-weight: bold; }' +
+        /* Pie de página */
+        '.pie-impresion { font-size: 10px; color: #888; text-align: center; margin-top: 20px; border-top: 1px solid #eee; padding-top: 8px; }' +
+        /* Botón imprimir (solo en pantalla) */
+        '.btn-imprimir-remision { display: block; margin: 0 auto 24px auto; padding: 12px 32px; background: #ffcf22; color: #1a1a1a; border: none; border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer; }' +
+        '.btn-imprimir-remision:hover { background: #f0c000; }' +
+        '@media print { .no-print { display: none !important; } body { padding: 0; } }' +
+      '</style>' +
+    '</head>' +
+    '<body>' +
+
+      /* Botón imprimir visible solo en pantalla */
+      '<div class="no-print" style="text-align:center; margin-bottom:24px;">' +
+        '<button class="btn-imprimir-remision" onclick="window.print()">🖨 Imprimir / Guardar PDF</button>' +
+      '</div>' +
+
+      /* Encabezado del documento */
+      '<div class="doc-header">' +
+        '<h1>REMISIÓN</h1>' +
+        '<h2>' + esc(orden.numero_op) + '</h2>' +
+        '<p>Fecha de creación: ' + esc(orden.fecha) + '</p>' +
+      '</div>' +
+      '<hr>' +
+
+      /* Datos de la orden en grid 2 columnas */
+      '<div class="datos-grid">' +
+        '<div class="dato-campo">' +
+          '<label>Cliente / Local</label>' +
+          '<span>' + esc(orden.nombre_cliente || '—') + '</span>' +
+        '</div>' +
+        '<div class="dato-campo">' +
+          '<label>Local de origen</label>' +
+          '<span>' + esc(orden.local_origen || '—') + '</span>' +
+        '</div>' +
+        '<div class="dato-campo">' +
+          '<label>Recibe equipo</label>' +
+          '<span>' + esc(orden.nombre_receptor || '—') + '</span>' +
+        '</div>' +
+        '<div class="dato-campo">' +
+          '<label>Estado</label>' +
+          '<span>' + esc(orden.estado || '—') + '</span>' +
+        '</div>' +
+      '</div>' +
+
+      /* Tabla de productos */
+      '<table>' +
+        '<thead>' +
+          '<tr>' +
+            '<th style="width:40px;">#</th>' +
+            '<th style="text-align:left;">Descripción</th>' +
+            '<th style="width:60px;">Cant</th>' +
+            '<th style="width:110px; text-align:right;">Valor Unit.</th>' +
+            '<th style="width:110px; text-align:right;">Valor Total</th>' +
+          '</tr>' +
+        '</thead>' +
+        '<tbody>' + filasProductos + '</tbody>' +
+        '<tfoot>' +
+          '<tr class="fila-total">' +
+            '<td colspan="3"></td>' +
+            '<td style="text-align:right;">TOTAL:</td>' +
+            '<td style="text-align:right;">' + fmt(totalGeneral) + '</td>' +
+          '</tr>' +
+        '</tfoot>' +
+      '</table>' +
+
+      /* Observaciones */
+      '<div class="observaciones">' +
+        '<strong>Observaciones:</strong>' +
+        '<p>' + esc(orden.observaciones || 'Sin observaciones') + '</p>' +
+      '</div>' +
+
+      /* Firmas */
+      '<div class="firmas">' +
+        '<div class="firma-bloque">' +
+          '<div style="height:50px;"></div>' +
+          '<div class="firma-linea">Entrega: ________________________</div>' +
+        '</div>' +
+        '<div class="firma-bloque">' +
+          '<div style="height:50px;"></div>' +
+          '<div class="firma-linea">Recibe: ________________________</div>' +
+        '</div>' +
+      '</div>' +
+
+      /* Pie de fecha de impresión */
+      '<p class="pie-impresion">Impreso el: ' + fechaImpresion + '</p>' +
+
+    '</body></html>';
+
+  // Abrir nueva pestaña y escribir el HTML
+  var nuevaVentana = window.open('', '_blank');
+  if (nuevaVentana) {
+    nuevaVentana.document.write(html);
+    nuevaVentana.document.close();
+  } else {
+    alert('El navegador bloqueó la nueva pestaña. Permite ventanas emergentes para este sitio.');
+  }
+}
+
 // ==================== IMPRESIÓN PDF ====================
 function imprimirOrden() {
   // Actualizar pie de página del PDF con fecha y estado actual
@@ -1641,7 +1892,7 @@ function imprimirOrden() {
 
 // ==================== CONFIGURACIÓN (Super admin) ====================
 
-// Cargar configuración en la tabla editable
+// Cargar configuración general y de consecutivos
 function cargarConfiguracion() {
   google.script.run
     .withSuccessHandler(function(config) {
@@ -1653,6 +1904,15 @@ function cargarConfiguracion() {
       tbody.innerHTML = '<tr><td colspan="4" class="sin-datos">Error al cargar configuración</td></tr>';
     })
     .getConfiguracion();
+
+  // La sección de consecutivos solo se carga y muestra para Super admin
+  var secConsec = document.getElementById('consecutivos-container');
+  if (usuarioActual && usuarioActual.rol === 'Super admin') {
+    if (secConsec) secConsec.style.display = '';
+    cargarInfoConsecutivo();
+  } else {
+    if (secConsec) secConsec.style.display = 'none';
+  }
 }
 
 // Descripciones de cada parámetro (para mostrar en la tabla)
@@ -1679,6 +1939,8 @@ function renderizarTablaConfiguracion(config) {
   var html = '';
   for (var i = 0; i < parametros.length; i++) {
     var param = parametros[i];
+    // Los parámetros de consecutivo tienen su propia sección de gestión
+    if (PARAMS_CONSECUTIVO.indexOf(param) !== -1) continue;
     var valor = config[param] || '';
     var desc = CONFIG_DESCRIPCIONES[param] || '';
     var previewHtml = '';
@@ -1702,6 +1964,109 @@ function renderizarTablaConfiguracion(config) {
   }
 
   tbody.innerHTML = html;
+}
+
+// ==================== CONSECUTIVOS OP ====================
+
+// Cargar y renderizar la sección de control de consecutivos
+function cargarInfoConsecutivo() {
+  google.script.run
+    .withSuccessHandler(renderizarInfoConsecutivo)
+    .withFailureHandler(function() {
+      document.getElementById('consec-progreso-texto').textContent = 'Error al cargar datos de consecutivo.';
+    })
+    .obtenerInfoConsecutivo();
+}
+
+// Actualizar la UI de la sección de consecutivos con los datos del servidor
+function renderizarInfoConsecutivo(info) {
+  document.getElementById('consec-inicio').value = info.inicio;
+  document.getElementById('consec-fin').value    = info.fin;
+  document.getElementById('consec-actual-display').textContent =
+    info.actual === 0 ? 'Sin usar' : info.actual;
+
+  // Barra de progreso con color según porcentaje de uso
+  var pct   = Math.min(info.porcentajeUso, 100);
+  var barra = document.getElementById('consec-barra');
+  barra.style.width = pct + '%';
+
+  if (pct >= 90) {
+    barra.style.background = '#f44336'; // Rojo: uso crítico
+  } else if (pct >= 70) {
+    barra.style.background = '#ff9800'; // Naranja: uso alto
+  } else {
+    barra.style.background = '#4caf50'; // Verde: uso normal
+  }
+
+  var rango = info.fin - info.inicio + 1;
+  document.getElementById('consec-progreso-texto').textContent =
+    'Usados: ' + info.usados + ' de ' + rango + '  —  Disponibles: ' + info.disponibles;
+}
+
+// Guardar el rango de consecutivos (inicio y fin) en el backend
+function guardarRangoConsecutivo() {
+  var inicio = parseInt(document.getElementById('consec-inicio').value, 10);
+  var fin    = parseInt(document.getElementById('consec-fin').value,    10);
+
+  if (isNaN(inicio) || isNaN(fin) || inicio < 1 || fin < 1) {
+    mostrarMensajeConsec('Ingrese valores numéricos enteros y positivos.', 'error');
+    return;
+  }
+  if (inicio >= fin) {
+    mostrarMensajeConsec('El inicio debe ser menor que el fin.', 'error');
+    return;
+  }
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.ok) {
+        mostrarMensajeConsec(res.mensaje || 'Rango guardado correctamente.', 'exito');
+        cargarInfoConsecutivo();
+      } else {
+        mostrarMensajeConsec(res.mensaje || 'Error al guardar el rango.', 'error');
+      }
+    })
+    .withFailureHandler(function(e) {
+      mostrarMensajeConsec('Error: ' + e.message, 'error');
+    })
+    .actualizarRangoConsecutivo(inicio, fin);
+}
+
+// Pedir confirmación antes de reiniciar el consecutivo
+function confirmarReinicioConsecutivo() {
+  var inicio = document.getElementById('consec-inicio').value || '?';
+  var ok = window.confirm(
+    '¿Está seguro de reiniciar el consecutivo?\n' +
+    'La siguiente OP empezará desde ' + inicio + '.\n' +
+    'Esta acción no se puede deshacer.'
+  );
+  if (ok) ejecutarReinicioConsecutivo();
+}
+
+// Ejecutar el reinicio del consecutivo en el backend
+function ejecutarReinicioConsecutivo() {
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.ok) {
+        mostrarMensajeConsec(res.mensaje || 'Consecutivo reiniciado.', 'exito');
+        cargarInfoConsecutivo();
+      } else {
+        mostrarMensajeConsec(res.mensaje || 'Error al reiniciar.', 'error');
+      }
+    })
+    .withFailureHandler(function(e) {
+      mostrarMensajeConsec('Error: ' + e.message, 'error');
+    })
+    .reiniciarConsecutivo();
+}
+
+// Mostrar mensaje temporal en la sección de consecutivos
+function mostrarMensajeConsec(texto, tipo) {
+  var el = document.getElementById('consec-mensaje');
+  el.textContent = texto;
+  el.className = 'config-mensaje ' + tipo;
+  el.style.display = 'inline-block';
+  setTimeout(function() { el.style.display = 'none'; }, 5000);
 }
 
 // Escape HTML para evitar inyección
@@ -1793,8 +2158,27 @@ function mostrarMensajeConfig(mensaje, tipo) {
 }
 
 // ==================== UTILIDADES ====================
+
+// Mostrar notificación flotante tipo toast (reemplaza alert() para mensajes de éxito)
+function mostrarNotificacion(mensaje, tipo) {
+  var notif = document.getElementById('notificacion-toast');
+  if (!notif) {
+    notif = document.createElement('div');
+    notif.id = 'notificacion-toast';
+    notif.className = 'notificacion-toast';
+    document.body.appendChild(notif);
+  }
+  notif.textContent = mensaje;
+  notif.className = 'notificacion-toast notif-' + (tipo || 'exito') + ' notif-visible';
+  clearTimeout(notif._timeout);
+  notif._timeout = setTimeout(function() {
+    notif.classList.remove('notif-visible');
+  }, 3500);
+}
+
 function cerrarModal(idModal) {
-  document.getElementById(idModal).style.display = 'none';
+  var el = document.getElementById(idModal);
+  if (el) el.style.display = 'none';
 }
 
 // Cerrar modal al hacer clic fuera
