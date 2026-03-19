@@ -2426,20 +2426,14 @@ function aplicarPermisosPorRol(rol) {
   }
 
   if (rol === 'Super admin') {
-    // Super admin: acceso total
+    // Super admin: acceso total a todos los módulos
     if (navProductos) navProductos.style.display = 'flex';
     if (navUsuarios) navUsuarios.style.display = 'flex';
     if (navReportes) navReportes.style.display = 'flex';
     if (navConfig) navConfig.style.display = 'flex';
-  } else if (rol === 'Auxiliar') {
-    // Auxiliar: productos y reportes
-    if (navProductos) navProductos.style.display = 'flex';
-    if (navUsuarios) navUsuarios.style.display = 'none';
-    if (navReportes) navReportes.style.display = 'flex';
-    if (navConfig) navConfig.style.display = 'none';
   } else {
-    // Vendedor: solo órdenes y clientes
-    if (navProductos) navProductos.style.display = 'none';
+    // Auxiliar y Vendedor: Órdenes + Clientes + Productos
+    if (navProductos) navProductos.style.display = 'flex';
     if (navUsuarios) navUsuarios.style.display = 'none';
     if (navReportes) navReportes.style.display = 'none';
     if (navConfig) navConfig.style.display = 'none';
