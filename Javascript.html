@@ -1892,78 +1892,71 @@ function imprimirOrden() {
 
 // ==================== CONFIGURACIÓN (Super admin) ====================
 
-// Cargar configuración general y de consecutivos
+// Mapa de parámetros de configuración → IDs de campos del formulario
+var CONFIG_CAMPO_MAP = {
+  nombre_comercial: 'cfg-nombre-comercial',
+  nombre_juridico: 'cfg-nombre-juridico',
+  direccion: 'cfg-direccion',
+  correo: 'cfg-correo',
+  celular: 'cfg-celular',
+  ciudad: 'cfg-ciudad',
+  logo_url: 'cfg-logo-url'
+};
+
+// Cambiar tab activo en módulo Configuración (solo CSS, sin recargar)
+function cambiarTabConfig(tabNombre) {
+  // Actualizar botones de tab
+  var tabs = document.querySelectorAll('.config-tab');
+  for (var i = 0; i < tabs.length; i++) {
+    tabs[i].classList.remove('config-tab-activo');
+    if (tabs[i].getAttribute('data-config-tab') === tabNombre) {
+      tabs[i].classList.add('config-tab-activo');
+    }
+  }
+  // Mostrar/ocultar paneles
+  document.getElementById('config-panel-negocio').style.display =
+    tabNombre === 'negocio' ? 'block' : 'none';
+  document.getElementById('config-panel-consecutivos').style.display =
+    tabNombre === 'consecutivos' ? 'block' : 'none';
+}
+
+// Cargar configuración general y de consecutivos — llena ambos tabs sin destruir el DOM
 function cargarConfiguracion() {
   google.script.run
     .withSuccessHandler(function(config) {
       window.appConfig = config;
-      renderizarTablaConfiguracion(config);
+      // Llenar campos del formulario de datos del negocio
+      var keys = Object.keys(CONFIG_CAMPO_MAP);
+      for (var i = 0; i < keys.length; i++) {
+        var param = keys[i];
+        var campo = document.getElementById(CONFIG_CAMPO_MAP[param]);
+        if (campo) campo.value = config[param] || '';
+      }
+      // Preview del logo
+      previewLogoCfgForm();
     })
     .withFailureHandler(function(error) {
-      var tbody = document.getElementById('tbody-configuracion');
-      tbody.innerHTML = '<tr><td colspan="4" class="sin-datos">Error al cargar configuración</td></tr>';
+      mostrarMensajeConfig('Error al cargar configuración: ' + error.message, 'error');
     })
     .getConfiguracion();
 
-  // La sección de consecutivos solo se carga y muestra para Super admin
-  var secConsec = document.getElementById('consecutivos-container');
-  if (usuarioActual && usuarioActual.rol === 'Super admin') {
-    if (secConsec) secConsec.style.display = '';
-    cargarInfoConsecutivo();
-  } else {
-    if (secConsec) secConsec.style.display = 'none';
-  }
+  // Cargar datos de consecutivos
+  cargarInfoConsecutivo();
 }
 
-// Descripciones de cada parámetro (para mostrar en la tabla)
-var CONFIG_DESCRIPCIONES = {
-  nombre_comercial: 'Nombre visible del negocio',
-  direccion: 'Dirección física',
-  nombre_juridico: 'Nombre persona jurídica',
-  correo: 'Correo de contacto',
-  celular: 'Celular de contacto',
-  logo_url: 'URL pública del logo',
-  ciudad: 'Ciudad del negocio'
-};
-
-// Renderizar tabla editable de configuración
-function renderizarTablaConfiguracion(config) {
-  var tbody = document.getElementById('tbody-configuracion');
-  var parametros = Object.keys(config);
-
-  if (parametros.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="4" class="sin-datos">Sin configuración</td></tr>';
-    return;
+// Preview automático del logo en el formulario de configuración
+function previewLogoCfgForm() {
+  var input = document.getElementById('cfg-logo-url');
+  var preview = document.getElementById('cfg-logo-preview');
+  if (!input || !preview) return;
+  var url = input.value.trim();
+  if (url) {
+    preview.src = url;
+    preview.onload = function() { preview.style.display = 'block'; };
+    preview.onerror = function() { preview.style.display = 'none'; };
+  } else {
+    preview.style.display = 'none';
   }
-
-  var html = '';
-  for (var i = 0; i < parametros.length; i++) {
-    var param = parametros[i];
-    // Los parámetros de consecutivo tienen su propia sección de gestión
-    if (PARAMS_CONSECUTIVO.indexOf(param) !== -1) continue;
-    var valor = config[param] || '';
-    var desc = CONFIG_DESCRIPCIONES[param] || '';
-    var previewHtml = '';
-
-    // Preview de imagen para logo_url
-    if (param === 'logo_url') {
-      previewHtml = '<img class="config-logo-preview" id="config-preview-' + param + '" src="' +
-        escapeHtml(valor) + '" alt="Preview" onerror="this.style.display=\'none\'" ' +
-        (valor ? '' : 'style="display:none"') + '>';
-    }
-
-    html += '<tr>' +
-      '<td><strong>' + escapeHtml(param) + '</strong></td>' +
-      '<td><input type="text" class="config-input" data-param="' + escapeHtml(param) + '" value="' +
-      escapeHtml(valor) + '"' +
-      (param === 'logo_url' ? ' onblur="previewLogoConfig(this)"' : '') +
-      '></td>' +
-      '<td class="config-desc">' + escapeHtml(desc) + '</td>' +
-      '<td>' + previewHtml + '</td>' +
-      '</tr>';
-  }
-
-  tbody.innerHTML = html;
 }
 
 // ==================== CONSECUTIVOS OP ====================
@@ -2077,24 +2070,16 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-// Preview automático del logo al cambiar la URL
-function previewLogoConfig(input) {
-  var param = input.getAttribute('data-param');
-  var preview = document.getElementById('config-preview-' + param);
-  if (preview) {
-    preview.src = input.value;
-    preview.style.display = input.value ? 'block' : 'none';
-  }
-}
-
-// Guardar todos los cambios de configuración
+// Guardar todos los cambios de configuración (lee desde campos del formulario)
 function guardarConfiguracion() {
-  var inputs = document.querySelectorAll('.config-input');
   var cambios = [];
+  var keys = Object.keys(CONFIG_CAMPO_MAP);
 
-  for (var i = 0; i < inputs.length; i++) {
-    var param = inputs[i].getAttribute('data-param');
-    var valor = inputs[i].value;
+  for (var i = 0; i < keys.length; i++) {
+    var param = keys[i];
+    var campo = document.getElementById(CONFIG_CAMPO_MAP[param]);
+    if (!campo) continue;
+    var valor = campo.value;
     if (window.appConfig[param] !== valor) {
       cambios.push({ parametro: param, valor: valor });
     }

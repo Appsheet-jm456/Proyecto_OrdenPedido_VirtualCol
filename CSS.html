@@ -1103,12 +1103,76 @@ body {
   text-align: center;
 }
 
-/* ==================== CONFIGURACIÓN (Super admin) ==================== */
-.config-tabla-container {
+/* ==================== CONFIGURACIÓN — TABS (Super admin) ==================== */
+
+/* Barra de tabs */
+.config-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 2px solid #e0e0e0;
+  margin-bottom: 20px;
+}
+
+.config-tab {
+  display: inline-flex;
+  align-items: center;
+  padding: 12px 22px;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  font-size: 14px;
+  font-weight: 500;
+  color: #666;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+  margin-bottom: -2px;
+}
+
+.config-tab:hover {
+  background: #f5f5f5;
+  color: #1a1a1a;
+}
+
+.config-tab.config-tab-activo {
+  background: #ffcf22;
+  color: #1a1a1a;
+  font-weight: 700;
+  border-bottom: 3px solid #ffcf22;
+  border-radius: 8px 8px 0 0;
+}
+
+/* Paneles de contenido de tabs */
+.config-panel {
+  /* Visibilidad controlada por JS con display:none/block */
+}
+
+/* Formulario de datos del negocio */
+.config-form-container {
   background: #fff;
   border-radius: 10px;
-  padding: 20px;
+  padding: 24px;
   box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+
+.config-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.config-form-grid .campo-form-full {
+  grid-column: 1 / -1;
+}
+
+/* Preview del logo en formulario de configuración */
+.config-logo-preview-form {
+  max-width: 120px;
+  max-height: 80px;
+  border-radius: 6px;
+  border: 1px solid #eee;
+  margin-top: 8px;
 }
 
 .config-input {
@@ -1125,18 +1189,6 @@ body {
   outline: none;
   border-color: #ffcf22;
   box-shadow: 0 0 0 3px rgba(255,207,34,0.15);
-}
-
-.config-desc {
-  font-size: 12px;
-  color: #888;
-}
-
-.config-logo-preview {
-  max-width: 80px;
-  max-height: 60px;
-  border-radius: 4px;
-  border: 1px solid #eee;
 }
 
 .config-acciones {
@@ -1577,6 +1629,24 @@ body {
 
   /* Consecutivos: grid de 1 columna en móvil */
   .consec-rango-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Tabs de configuración: ancho completo en móvil */
+  .config-tabs {
+    flex-direction: row;
+  }
+
+  .config-tab {
+    flex: 1;
+    justify-content: center;
+    padding: 12px 10px;
+    font-size: 13px;
+    min-height: 44px;
+  }
+
+  /* Formulario de config: una columna en móvil */
+  .config-form-grid {
     grid-template-columns: 1fr;
   }
 
