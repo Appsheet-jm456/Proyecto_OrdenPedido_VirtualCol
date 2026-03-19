@@ -1032,9 +1032,11 @@ function cargarClientes() {
 
 function renderizarClientes(clientes) {
   var tbody = document.getElementById('tbody-clientes');
+  var esAdmin = usuarioActual && usuarioActual.rol === 'Super admin';
+  var colspan = esAdmin ? 6 : 5;
 
   if (clientes.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="sin-datos">No hay clientes registrados</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="' + colspan + '" class="sin-datos">No hay clientes registrados</td></tr>';
     return;
   }
 
@@ -1044,10 +1046,19 @@ function renderizarClientes(clientes) {
     html += '<tr>' +
       '<td>' + c.id_cliente + '</td>' +
       '<td>' + c.nombre_local + '</td>' +
-      '<td>' + c.contacto + '</td>' +
-      '<td>' + c.telefono + '</td>' +
-      '<td>' + c.ciudad + '</td>' +
-      '</tr>';
+      '<td>' + (c.contacto || '') + '</td>' +
+      '<td>' + (c.telefono || '') + '</td>' +
+      '<td>' + (c.ciudad || '') + '</td>';
+    if (esAdmin) {
+      html += '<td class="col-acciones-admin">' +
+        '<div class="btns-accion-grupo">' +
+        '<button class="btn-accion-icon btn-accion-editar" title="Editar" onclick="abrirModalEditarCliente(\'' + c.id_cliente + '\')">' +
+        '<span class="material-icons">edit</span></button>' +
+        '<button class="btn-accion-icon btn-accion-eliminar" title="Eliminar" onclick="confirmarEliminarCliente(\'' + c.id_cliente + '\', \'' + escapeHtml(c.nombre_local) + '\')">' +
+        '<span class="material-icons">delete</span></button>' +
+        '</div></td>';
+    }
+    html += '</tr>';
   }
 
   tbody.innerHTML = html;
@@ -1099,28 +1110,115 @@ function guardarNuevoCliente() {
     .crearCliente(datos);
 }
 
+// ==================== EDITAR / ELIMINAR CLIENTES ====================
+
+// Abrir modal de edición con datos precargados del cliente
+function abrirModalEditarCliente(id) {
+  var cliente = clientesCache.find(function(c) { return String(c.id_cliente) === String(id); });
+  if (!cliente) { mostrarNotificacion('Cliente no encontrado', 'error'); return; }
+
+  document.getElementById('edit-cliente-id').value = cliente.id_cliente;
+  document.getElementById('edit-cliente-nombre').value = cliente.nombre_local || '';
+  document.getElementById('edit-cliente-contacto').value = cliente.contacto || '';
+  document.getElementById('edit-cliente-telefono').value = cliente.telefono || '';
+  document.getElementById('edit-cliente-ciudad').value = cliente.ciudad || '';
+  document.getElementById('modal-editar-cliente').style.display = 'flex';
+}
+
+// Guardar cambios del cliente editado
+function guardarEdicionCliente() {
+  var id = document.getElementById('edit-cliente-id').value;
+  var nombre = document.getElementById('edit-cliente-nombre').value.trim();
+  var telefono = document.getElementById('edit-cliente-telefono').value.trim();
+
+  if (!nombre) { mostrarNotificacion('El nombre del local es obligatorio', 'error'); return; }
+  if (!telefono) { mostrarNotificacion('El teléfono es obligatorio', 'error'); return; }
+
+  var datos = {
+    nombre_local: nombre,
+    contacto: document.getElementById('edit-cliente-contacto').value.trim(),
+    telefono: telefono,
+    ciudad: document.getElementById('edit-cliente-ciudad').value.trim()
+  };
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.success) {
+        mostrarNotificacion('Cliente actualizado correctamente', 'exito');
+        cerrarModal('modal-editar-cliente');
+        cargarClientes();
+      } else {
+        mostrarNotificacion(res.mensaje || 'Error al actualizar', 'error');
+      }
+    })
+    .withFailureHandler(function(e) { mostrarNotificacion('Error: ' + e.message, 'error'); })
+    .editarCliente(id, datos);
+}
+
+// Confirmar y eliminar cliente
+function confirmarEliminarCliente(id, nombre) {
+  var ok = window.confirm('¿Está seguro de eliminar el cliente "' + nombre + '"?\nEsta acción no se puede deshacer.');
+  if (!ok) return;
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.success) {
+        mostrarNotificacion('Cliente eliminado correctamente', 'exito');
+        cargarClientes();
+      } else {
+        mostrarNotificacion(res.mensaje || 'Error al eliminar', 'error');
+      }
+    })
+    .withFailureHandler(function(e) { mostrarNotificacion('Error: ' + e.message, 'error'); })
+    .eliminarCliente(id);
+}
+
 // ==================== USUARIOS ====================
 function cargarUsuarios() {
   google.script.run
     .withSuccessHandler(function(usuarios) {
       var tbody = document.getElementById('tbody-usuarios');
+      var esAdmin = usuarioActual && usuarioActual.rol === 'Super admin';
 
       if (usuarios.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="sin-datos">No hay usuarios</td></tr>';
+        var colspan = esAdmin ? 7 : 6;
+        tbody.innerHTML = '<tr><td colspan="' + colspan + '" class="sin-datos">No hay usuarios</td></tr>';
         return;
       }
 
       var html = '';
       for (var i = 0; i < usuarios.length; i++) {
         var u = usuarios[i];
+        var esActivo = u.activo === 'Sí';
         html += '<tr>' +
           '<td>' + u.id_usuario + '</td>' +
           '<td>' + u.nombre + '</td>' +
           '<td>' + u.email + '</td>' +
           '<td>' + u.rol + '</td>' +
-          '<td>' + u.local_asignado + '</td>' +
-          '<td>' + u.activo + '</td>' +
-          '</tr>';
+          '<td>' + (u.local_asignado || '') + '</td>' +
+          '<td><span class="badge ' + (esActivo ? 'badge-prestado' : 'badge-regresado') + '">' + u.activo + '</span></td>';
+        if (esAdmin) {
+          // No permitir acciones sobre sí mismo para toggle
+          var esMismo = String(u.id_usuario) === String(usuarioActual.id_usuario);
+          var btnToggle = '';
+          if (esMismo) {
+            btnToggle = '<button class="btn-accion-icon btn-accion-toggle-disabled" title="No puedes desactivarte" disabled>' +
+              '<span class="material-icons">block</span></button>';
+          } else if (esActivo) {
+            btnToggle = '<button class="btn-accion-icon btn-accion-eliminar" title="Desactivar" onclick="toggleEstadoUsuario(\'' + u.id_usuario + '\', \'' + escapeHtml(u.nombre) + '\')">' +
+              '<span class="material-icons">person_off</span></button>';
+          } else {
+            btnToggle = '<button class="btn-accion-icon btn-accion-activar" title="Activar" onclick="toggleEstadoUsuario(\'' + u.id_usuario + '\', \'' + escapeHtml(u.nombre) + '\')">' +
+              '<span class="material-icons">person</span></button>';
+          }
+          html += '<td class="col-acciones-admin">' +
+            '<div class="btns-accion-grupo">' +
+            '<button class="btn-accion-icon btn-accion-editar" title="Editar" onclick="abrirModalEditarUsuario(\'' + u.id_usuario + '\')">' +
+            '<span class="material-icons">edit</span></button>' +
+            btnToggle +
+            '</div></td>';
+        }
+        html += '</tr>';
       }
 
       tbody.innerHTML = html;
@@ -1167,6 +1265,79 @@ function guardarNuevoUsuario() {
       alert('Error: ' + error.message);
     })
     .crearUsuario(datos);
+}
+
+// ==================== EDITAR / DESACTIVAR USUARIOS ====================
+
+// Abrir modal de edición con datos precargados del usuario
+function abrirModalEditarUsuario(id) {
+  // Buscar en la tabla actual (los datos vienen del servidor, no hay cache global)
+  google.script.run
+    .withSuccessHandler(function(usuarios) {
+      var usuario = usuarios.find(function(u) { return String(u.id_usuario) === String(id); });
+      if (!usuario) { mostrarNotificacion('Usuario no encontrado', 'error'); return; }
+
+      document.getElementById('edit-usuario-id').value = usuario.id_usuario;
+      document.getElementById('edit-usuario-nombre').value = usuario.nombre || '';
+      document.getElementById('edit-usuario-email').value = usuario.email || '';
+      document.getElementById('edit-usuario-rol').value = usuario.rol || 'Vendedor';
+      document.getElementById('edit-usuario-local').value = usuario.local_asignado || '';
+      document.getElementById('edit-usuario-password').value = '';
+      document.getElementById('modal-editar-usuario').style.display = 'flex';
+    })
+    .obtenerUsuarios();
+}
+
+// Guardar cambios del usuario editado
+function guardarEdicionUsuario() {
+  var id = document.getElementById('edit-usuario-id').value;
+  var nombre = document.getElementById('edit-usuario-nombre').value.trim();
+  var email = document.getElementById('edit-usuario-email').value.trim();
+  var rol = document.getElementById('edit-usuario-rol').value;
+
+  if (!nombre) { mostrarNotificacion('El nombre es obligatorio', 'error'); return; }
+  if (!email || email.indexOf('@') === -1) { mostrarNotificacion('Ingrese un email válido', 'error'); return; }
+  if (!rol) { mostrarNotificacion('Seleccione un rol', 'error'); return; }
+
+  var datos = {
+    nombre: nombre,
+    email: email,
+    rol: rol,
+    local_asignado: document.getElementById('edit-usuario-local').value.trim(),
+    password: document.getElementById('edit-usuario-password').value
+  };
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.success) {
+        mostrarNotificacion('Usuario actualizado correctamente', 'exito');
+        cerrarModal('modal-editar-usuario');
+        cargarUsuarios();
+      } else {
+        mostrarNotificacion(res.mensaje || 'Error al actualizar', 'error');
+      }
+    })
+    .withFailureHandler(function(e) { mostrarNotificacion('Error: ' + e.message, 'error'); })
+    .editarUsuario(id, datos);
+}
+
+// Activar o desactivar un usuario con confirmación
+function toggleEstadoUsuario(id, nombre) {
+  var ok = window.confirm('¿Está seguro de cambiar el estado del usuario "' + nombre + '"?');
+  if (!ok) return;
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.success) {
+        var msg = res.activo === 'Sí' ? 'Usuario activado' : 'Usuario desactivado';
+        mostrarNotificacion(msg + ' correctamente', 'exito');
+        cargarUsuarios();
+      } else {
+        mostrarNotificacion(res.mensaje || 'Error al cambiar estado', 'error');
+      }
+    })
+    .withFailureHandler(function(e) { mostrarNotificacion('Error: ' + e.message, 'error'); })
+    .toggleUsuario(id);
 }
 
 // ==================== PRODUCTOS — TAB GESTIÓN ====================
@@ -2247,6 +2418,12 @@ function aplicarPermisosPorRol(rol) {
   var navUsuarios = document.getElementById('nav-usuarios');
   var navReportes = document.getElementById('nav-reportes');
   var navConfig = document.getElementById('nav-configuracion');
+
+  // Mostrar u ocultar columnas de acciones según rol
+  var colsAcciones = document.querySelectorAll('.col-acciones-admin');
+  for (var a = 0; a < colsAcciones.length; a++) {
+    colsAcciones[a].style.display = (rol === 'Super admin') ? '' : 'none';
+  }
 
   if (rol === 'Super admin') {
     // Super admin: acceso total

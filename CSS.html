@@ -643,6 +643,68 @@ body {
   font-size: 16px;
 }
 
+/* ==================== BOTONES DE ACCIÓN EN TABLAS (Editar/Eliminar) ==================== */
+.btns-accion-grupo {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.btn-accion-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: box-shadow 0.2s, transform 0.15s;
+  padding: 0;
+}
+
+.btn-accion-icon:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+  transform: translateY(-1px);
+}
+
+.btn-accion-icon .material-icons {
+  font-size: 17px;
+  color: #fff;
+}
+
+.btn-accion-editar {
+  background: #ffcf22;
+}
+
+.btn-accion-editar .material-icons {
+  color: #1a1a1a;
+}
+
+.btn-accion-eliminar {
+  background: #f44336;
+}
+
+.btn-accion-activar {
+  background: #4caf50;
+}
+
+.btn-accion-toggle-disabled {
+  background: #e0e0e0;
+  cursor: not-allowed;
+}
+
+.btn-accion-toggle-disabled .material-icons {
+  color: #999;
+}
+
+/* Campo de solo lectura en modales de edición */
+.input-readonly {
+  background: #f5f5f5;
+  color: #888;
+  cursor: not-allowed;
+}
+
 /* ==================== MODALES ==================== */
 .modal-overlay {
   position: fixed;
