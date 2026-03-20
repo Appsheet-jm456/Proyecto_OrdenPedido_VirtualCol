@@ -692,6 +692,55 @@ function crearCliente(datos) {
   return { success: true, id_cliente: nuevoId };
 }
 
+// Editar cliente existente — busca por id_cliente y actualiza campos
+function editarCliente(id, datos) {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var hoja = ss.getSheetByName('Clientes');
+  var filas = hoja.getDataRange().getValues();
+
+  for (var i = 1; i < filas.length; i++) {
+    if (String(filas[i][0]) === String(id)) {
+      var fila = i + 1;
+      hoja.getRange(fila, 2).setValue(datos.nombre_local);
+      hoja.getRange(fila, 3).setValue(datos.contacto || '');
+      hoja.getRange(fila, 4).setValue(datos.telefono || '');
+      hoja.getRange(fila, 5).setValue(datos.ciudad || '');
+      return { success: true };
+    }
+  }
+  return { success: false, mensaje: 'Cliente no encontrado' };
+}
+
+// Eliminar cliente — valida que no tenga órdenes activas (Pendiente o Prestado)
+function eliminarCliente(id) {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var hojaClientes = ss.getSheetByName('Clientes');
+  var hojaOP = ss.getSheetByName('Orden_Pedido');
+
+  // Verificar órdenes activas del cliente
+  if (hojaOP) {
+    var datosOP = hojaOP.getDataRange().getValues();
+    for (var o = 1; o < datosOP.length; o++) {
+      if (String(datosOP[o][2]) === String(id)) {
+        var estado = datosOP[o][6];
+        if (estado === ESTADOS.PENDIENTE || estado === ESTADOS.PRESTADO) {
+          return { success: false, mensaje: 'No se puede eliminar este cliente porque tiene órdenes activas.' };
+        }
+      }
+    }
+  }
+
+  // Buscar y eliminar la fila del cliente
+  var filas = hojaClientes.getDataRange().getValues();
+  for (var i = 1; i < filas.length; i++) {
+    if (String(filas[i][0]) === String(id)) {
+      hojaClientes.deleteRow(i + 1);
+      return { success: true };
+    }
+  }
+  return { success: false, mensaje: 'Cliente no encontrado' };
+}
+
 // ============================================================
 // CRUD — PRODUCTOS
 // ============================================================
@@ -872,7 +921,10 @@ function crearOrden(datosOrden, detalleItems) {
   var numeroOP = generarNumeroOP(); // Puede lanzar error si rango agotado
 
   var ahora = new Date();
-  var fecha = Utilities.formatDate(ahora, 'America/Bogota', 'yyyy-MM-dd');
+  // Usar la fecha enviada por el usuario si existe, si no usar la fecha actual
+  var fecha = (datosOrden.fecha && datosOrden.fecha.trim() !== '')
+    ? datosOrden.fecha
+    : Utilities.formatDate(ahora, 'America/Bogota', 'yyyy-MM-dd');
   var hora = Utilities.formatDate(ahora, 'America/Bogota', 'HH:mm:ss');
 
   // Calcular valor total de la orden sumando los ítems del detalle
@@ -1344,6 +1396,55 @@ function crearUsuario(datos) {
 
   hoja.appendRow(fila);
   return { success: true, id_usuario: nuevoId };
+}
+
+// Editar usuario existente — actualiza nombre, email, rol, local y opcionalmente contraseña
+function editarUsuario(id, datos) {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var hoja = ss.getSheetByName('Usuarios');
+  var filas = hoja.getDataRange().getValues();
+
+  for (var i = 1; i < filas.length; i++) {
+    if (String(filas[i][0]) === String(id)) {
+      var fila = i + 1;
+      hoja.getRange(fila, 2).setValue(datos.nombre);
+      hoja.getRange(fila, 3).setValue(datos.email);
+      hoja.getRange(fila, 5).setValue(datos.rol);
+      hoja.getRange(fila, 6).setValue(datos.local_asignado || '');
+
+      // Si se proporcionó nueva contraseña, actualizar el hash
+      if (datos.password && datos.password.trim() !== '') {
+        var passwordHash = Utilities.computeDigest(
+          Utilities.DigestAlgorithm.SHA_256,
+          datos.password
+        ).map(function(byte) {
+          return ('0' + (byte & 0xFF).toString(16)).slice(-2);
+        }).join('');
+        hoja.getRange(fila, 4).setValue(passwordHash);
+      }
+
+      return { success: true };
+    }
+  }
+  return { success: false, mensaje: 'Usuario no encontrado' };
+}
+
+// Activar/Desactivar usuario — cambia el campo activo de Sí a No o viceversa
+function toggleUsuario(id) {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var hoja = ss.getSheetByName('Usuarios');
+  var filas = hoja.getDataRange().getValues();
+
+  for (var i = 1; i < filas.length; i++) {
+    if (String(filas[i][0]) === String(id)) {
+      var fila = i + 1;
+      var activo = filas[i][6];
+      var nuevoEstado = (activo === 'Sí') ? 'No' : 'Sí';
+      hoja.getRange(fila, 7).setValue(nuevoEstado);
+      return { success: true, activo: nuevoEstado };
+    }
+  }
+  return { success: false, mensaje: 'Usuario no encontrado' };
 }
 
 // ============================================================
