@@ -714,10 +714,12 @@ function mostrarPaginaNuevaOrden() {
   document.getElementById('item-valor').value = '';
   renderizarItemsNuevaOrden();
 
-  // Mostrar fecha actual en el campo de solo lectura
+  // Inicializar campo de fecha editable con la fecha de hoy (formato yyyy-MM-dd)
   var hoy = new Date();
-  var fechaStr = hoy.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  document.getElementById('nueva-orden-fecha-display').textContent = fechaStr;
+  var anio = hoy.getFullYear();
+  var mes = ('0' + (hoy.getMonth() + 1)).slice(-2);
+  var dia = ('0' + hoy.getDate()).slice(-2);
+  document.getElementById('nueva-orden-fecha').value = anio + '-' + mes + '-' + dia;
 
   // Resetear formulario inline de nuevo cliente
   document.getElementById('form-nuevo-cliente-inline').style.display = 'none';
@@ -880,12 +882,19 @@ function guardarNuevaOrden() {
 
   var receptor = document.getElementById('nueva-orden-receptor').value.trim();
 
+  var fechaOrden = document.getElementById('nueva-orden-fecha').value;
+  if (!fechaOrden) {
+    alert('Seleccione una fecha para la orden');
+    return;
+  }
+
   var datosOrden = {
     id_cliente: parseInt(idCliente),
     id_vendedor: usuarioActual.id_usuario,
     local_origen: local,
     observaciones: obs,
-    nombre_receptor: receptor
+    nombre_receptor: receptor,
+    fecha: fechaOrden
   };
 
   google.script.run

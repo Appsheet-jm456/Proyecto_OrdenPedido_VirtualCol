@@ -921,7 +921,10 @@ function crearOrden(datosOrden, detalleItems) {
   var numeroOP = generarNumeroOP(); // Puede lanzar error si rango agotado
 
   var ahora = new Date();
-  var fecha = Utilities.formatDate(ahora, 'America/Bogota', 'yyyy-MM-dd');
+  // Usar la fecha enviada por el usuario si existe, si no usar la fecha actual
+  var fecha = (datosOrden.fecha && datosOrden.fecha.trim() !== '')
+    ? datosOrden.fecha
+    : Utilities.formatDate(ahora, 'America/Bogota', 'yyyy-MM-dd');
   var hora = Utilities.formatDate(ahora, 'America/Bogota', 'HH:mm:ss');
 
   // Calcular valor total de la orden sumando los ítems del detalle
