@@ -9,9 +9,11 @@ var sesionToken = null;
 var usuarioActual = null;
 var ordenesCache = [];
 var clientesCache = [];
+var productosCache = [];
 var itemsNuevaOrden = [];
 var ordenSeleccionada = null;
 var filtroEstadoActual = null;
+var itemProductoSeleccionado = ''; // id_producto del autocomplete (vacío si texto libre)
 
 // ==================== AUTENTICACIÓN ====================
 function iniciarSesion() {
@@ -66,15 +68,19 @@ function mostrarDashboard() {
 
   // Mostrar tabs según rol
   if (usuarioActual.rol === 'Super admin') {
+    document.getElementById('tab-productos').style.display = 'inline-block';
     document.getElementById('tab-usuarios').style.display = 'inline-block';
     document.getElementById('tab-reportes').style.display = 'inline-block';
   } else if (usuarioActual.rol === 'Auxiliar') {
+    document.getElementById('tab-productos').style.display = 'inline-block';
     document.getElementById('tab-reportes').style.display = 'inline-block';
   }
 
   cargarContadores();
   cargarOrdenes();
   cargarClientes();
+  cargarProductosCache();
+  cargarVendedoresReporte();
 }
 
 function cambiarTab(tab) {
@@ -97,6 +103,7 @@ function cambiarTab(tab) {
 
   // Cargar datos según tab
   if (tab === 'clientes') cargarClientes();
+  if (tab === 'productos') cargarProductos();
   if (tab === 'usuarios') cargarUsuarios();
 }
 
@@ -282,10 +289,10 @@ function renderizarOrdenes() {
         '<td>' + fechaHtml + '</td>' +
         '<td>' + (o.nombre_cliente || '—') + '</td>' +
         '<td>' + vendedorHtml + '</td>' +
-        '<td>$' + formatearNumero(0) + '</td>' +
+        '<td>' + formatearMoneda(o.valor_total || 0) + '</td>' +
         '<td>' + horaStr + '</td>' +
         '<td><span class="badge ' + badgeClass + '">' + (o.estado || '—') + '</span></td>' +
-        '<td><button class="btn-accion" onclick="verOrden(' + o.id_op + ')">' +
+        '<td><button class="btn-accion" onclick="verOrden(\'' + o.id_op + '\')">' +
         '<span class="material-icons">visibility</span> Ver</button></td>' +
         '</tr>';
 
@@ -305,11 +312,12 @@ function renderizarOrdenes() {
           '<div class="linea-card"><span class="etiqueta">Fecha</span><span>' + fechaCorta + '</span></div>' +
           '<div class="linea-card"><span class="etiqueta">Cliente</span><span>' + (o.nombre_cliente || '—') + '</span></div>' +
           '<div class="linea-card"><span class="etiqueta">Vendedor</span><span>' + (o.nombre_vendedor || '—') + '</span></div>' +
+          '<div class="linea-card"><span class="etiqueta">Valor</span><strong>' + formatearMoneda(o.valor_total || 0) + '</strong></div>' +
           receptorCard +
           limiteCard +
         '</div>' +
         '<div class="card-orden-mobile-footer">' +
-          '<button class="btn-accion" onclick="verOrden(' + o.id_op + ')">' +
+          '<button class="btn-accion" onclick="verOrden(\'' + o.id_op + '\')">' +
           '<span class="material-icons">visibility</span> Ver</button>' +
         '</div>' +
       '</div>';
@@ -340,6 +348,16 @@ function obtenerClaseBadge(estado) {
 
 function formatearNumero(num) {
   return Number(num).toLocaleString('es-CO');
+}
+
+// Formatear como moneda colombiana (COP sin decimales)
+function formatearMoneda(valor) {
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(valor);
 }
 
 // ==================== VER / GESTIONAR ORDEN ====================
@@ -428,14 +446,14 @@ function generarBotonesTransicion(estadoActual, idOp) {
   if (estadoActual === 'Pendiente') {
     // Mostrar campo obligatorio de receptor antes del botón
     campoReceptor.style.display = 'block';
-    html = '<button class="btn-estado btn-estado-prestado" onclick="cambiarEstado(' + idOp + ', \'Prestado\')">Marcar como Prestado</button>';
+    html = '<button class="btn-estado btn-estado-prestado" onclick="cambiarEstado(\'' + idOp + '\', \'Prestado\')">Marcar como Prestado</button>';
   } else if (estadoActual === 'Prestado' || estadoActual === 'Por Cobrar/Devolver') {
     campoReceptor.style.display = 'none';
-    html = '<button class="btn-estado btn-estado-facturado" onclick="cambiarEstado(' + idOp + ', \'Facturado\')">Marcar como Facturado</button>' +
-           '<button class="btn-estado btn-estado-regresado" onclick="cambiarEstado(' + idOp + ', \'Regresado\')">Marcar como Regresado</button>';
+    html = '<button class="btn-estado btn-estado-facturado" onclick="cambiarEstado(\'' + idOp + '\', \'Facturado\')">Marcar como Facturado</button>' +
+           '<button class="btn-estado btn-estado-regresado" onclick="cambiarEstado(\'' + idOp + '\', \'Regresado\')">Marcar como Regresado</button>';
   } else if (estadoActual === 'Facturado') {
     campoReceptor.style.display = 'none';
-    html = '<button class="btn-estado btn-estado-regresado" onclick="cambiarEstado(' + idOp + ', \'Regresado\')">Marcar como Regresado</button>';
+    html = '<button class="btn-estado btn-estado-regresado" onclick="cambiarEstado(\'' + idOp + '\', \'Regresado\')">Marcar como Regresado</button>';
   } else if (estadoActual === 'Regresado') {
     campoReceptor.style.display = 'none';
     html = '<p style="color:#999; font-size:13px;">Orden cerrada — no hay más transiciones disponibles.</p>';
@@ -495,6 +513,14 @@ function abrirModalNuevaOrden() {
   document.getElementById('btn-toggle-nuevo-cliente').style.display = 'inline-flex';
   limpiarFormClienteInline();
 
+  // Resetear buscador de productos, selección y formulario inline de producto
+  itemProductoSeleccionado = '';
+  document.getElementById('item-buscar-producto').value = '';
+  document.getElementById('dropdown-productos').style.display = 'none';
+  document.getElementById('form-nuevo-producto-inline').style.display = 'none';
+  document.getElementById('btn-toggle-nuevo-producto-inline').style.display = 'inline-flex';
+  limpiarFormProductoInline();
+
   // Cargar lista de clientes para autocomplete
   cargarClientesAutocomplete();
 
@@ -540,16 +566,19 @@ function agregarItem() {
   }
 
   itemsNuevaOrden.push({
+    id_producto: itemProductoSeleccionado || '', // FK a Productos o vacío si texto libre
     descripcion_libre: desc,
     cantidad: cant,
     valor_unitario: valor,
     valor_total: cant * valor
   });
 
-  // Limpiar campos
+  // Limpiar campos y resetear producto seleccionado
   document.getElementById('item-descripcion').value = '';
   document.getElementById('item-cantidad').value = '1';
   document.getElementById('item-valor').value = '';
+  document.getElementById('item-buscar-producto').value = '';
+  itemProductoSeleccionado = '';
   document.getElementById('item-descripcion').focus();
 
   renderizarItemsNuevaOrden();
@@ -890,14 +919,512 @@ function guardarNuevoUsuario() {
     .crearUsuario(datos);
 }
 
+// ==================== PRODUCTOS — TAB GESTIÓN ====================
+
+// Cargar cache de productos activos (para autocomplete en órdenes)
+function cargarProductosCache() {
+  google.script.run
+    .withSuccessHandler(function(productos) {
+      productosCache = productos || [];
+    })
+    .obtenerProductos();
+}
+
+// Cargar todos los productos (activos e inactivos) para la tabla de gestión
+function cargarProductos() {
+  google.script.run
+    .withSuccessHandler(function(productos) {
+      renderizarProductos(productos);
+    })
+    .withFailureHandler(function(error) {
+      document.getElementById('tbody-productos').innerHTML =
+        '<tr><td colspan="6" class="sin-datos">Error: ' + error.message + '</td></tr>';
+    })
+    .listarProductos();
+}
+
+function renderizarProductos(productos) {
+  var tbody = document.getElementById('tbody-productos');
+  if (!productos || productos.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="sin-datos">No hay productos registrados</td></tr>';
+    return;
+  }
+
+  var html = '';
+  for (var i = 0; i < productos.length; i++) {
+    var p = productos[i];
+    var activoBadge = p.activo === 'Sí'
+      ? '<span class="badge badge-prestado">Sí</span>'
+      : '<span class="badge badge-regresado">No</span>';
+
+    html += '<tr' + (p.activo !== 'Sí' ? ' style="opacity:0.5;"' : '') + '>' +
+      '<td><strong>' + (p.nombre || '—') + '</strong></td>' +
+      '<td>' + (p.categoria || '—') + '</td>' +
+      '<td>' + (p.descripcion || '—') + '</td>' +
+      '<td>' + formatearMoneda(p.precio_ref || 0) + '</td>' +
+      '<td>' + activoBadge + '</td>' +
+      '<td>' +
+        '<button class="btn-accion" onclick="abrirModalEditarProducto(' + p.id_producto + ')" style="margin-right:4px;">' +
+          '<span class="material-icons">edit</span> Editar</button>';
+
+    if (p.activo === 'Sí') {
+      html += '<button class="btn-accion" onclick="confirmarDesactivarProducto(' + p.id_producto + ', \'' + (p.nombre || '').replace(/'/g, "\\'") + '\')" style="background:#f5f5f5; color:#f44336;">' +
+          '<span class="material-icons">block</span> Desactivar</button>';
+    }
+
+    html += '</td></tr>';
+  }
+  tbody.innerHTML = html;
+}
+
+function buscarProductos() {
+  google.script.run
+    .withSuccessHandler(function(productos) {
+      var termino = (document.getElementById('buscar-producto').value || '').toLowerCase();
+      if (!termino) {
+        renderizarProductos(productos);
+        return;
+      }
+      var filtrados = productos.filter(function(p) {
+        return (p.nombre || '').toLowerCase().indexOf(termino) !== -1 ||
+               (p.categoria || '').toLowerCase().indexOf(termino) !== -1;
+      });
+      renderizarProductos(filtrados);
+    })
+    .listarProductos();
+}
+
+// Abrir modal para crear nuevo producto
+function abrirModalNuevoProducto() {
+  document.getElementById('modal-producto-titulo').textContent = 'Nuevo Producto';
+  document.getElementById('btn-guardar-producto').textContent = 'Guardar Producto';
+  document.getElementById('producto-id').value = '';
+  document.getElementById('producto-nombre').value = '';
+  document.getElementById('producto-categoria').value = '';
+  document.getElementById('producto-descripcion').value = '';
+  document.getElementById('producto-precio').value = '';
+  document.getElementById('producto-activo').checked = true;
+  document.getElementById('modal-producto').style.display = 'flex';
+}
+
+// Abrir modal para editar producto existente
+function abrirModalEditarProducto(idProducto) {
+  google.script.run
+    .withSuccessHandler(function(productos) {
+      var producto = null;
+      for (var i = 0; i < productos.length; i++) {
+        if (String(productos[i].id_producto) === String(idProducto)) {
+          producto = productos[i];
+          break;
+        }
+      }
+      if (!producto) {
+        alert('Producto no encontrado');
+        return;
+      }
+
+      document.getElementById('modal-producto-titulo').textContent = 'Editar Producto';
+      document.getElementById('btn-guardar-producto').textContent = 'Actualizar Producto';
+      document.getElementById('producto-id').value = producto.id_producto;
+      document.getElementById('producto-nombre').value = producto.nombre || '';
+      document.getElementById('producto-categoria').value = producto.categoria || '';
+      document.getElementById('producto-descripcion').value = producto.descripcion || '';
+      document.getElementById('producto-precio').value = producto.precio_ref || '';
+      document.getElementById('producto-activo').checked = (producto.activo === 'Sí');
+      document.getElementById('modal-producto').style.display = 'flex';
+    })
+    .listarProductos();
+}
+
+// Guardar producto (crear o actualizar)
+function guardarProducto() {
+  var nombre = document.getElementById('producto-nombre').value.trim();
+  if (!nombre) {
+    alert('El nombre del producto es obligatorio');
+    return;
+  }
+
+  var datos = {
+    nombre: nombre,
+    categoria: document.getElementById('producto-categoria').value.trim(),
+    descripcion: document.getElementById('producto-descripcion').value.trim(),
+    precio_ref: parseFloat(document.getElementById('producto-precio').value) || 0,
+    activo: document.getElementById('producto-activo').checked ? 'Sí' : 'No'
+  };
+
+  var idProducto = document.getElementById('producto-id').value;
+
+  if (idProducto) {
+    // Actualizar
+    google.script.run
+      .withSuccessHandler(function(resultado) {
+        if (resultado.success) {
+          alert('Producto actualizado');
+          cerrarModal('modal-producto');
+          cargarProductos();
+          cargarProductosCache();
+        } else {
+          alert('Error: ' + resultado.mensaje);
+        }
+      })
+      .withFailureHandler(function(error) { alert('Error: ' + error.message); })
+      .actualizarProducto(idProducto, datos);
+  } else {
+    // Crear
+    google.script.run
+      .withSuccessHandler(function(resultado) {
+        if (resultado.success) {
+          alert('Producto creado');
+          cerrarModal('modal-producto');
+          cargarProductos();
+          cargarProductosCache();
+        } else {
+          alert('Error al crear el producto');
+        }
+      })
+      .withFailureHandler(function(error) { alert('Error: ' + error.message); })
+      .crearProducto(datos);
+  }
+}
+
+// Confirmar y desactivar producto
+function confirmarDesactivarProducto(idProducto, nombre) {
+  if (!confirm('¿Desactivar el producto "' + nombre + '"? No se eliminará, solo dejará de estar disponible.')) return;
+
+  google.script.run
+    .withSuccessHandler(function(resultado) {
+      if (resultado.success) {
+        alert('Producto desactivado');
+        cargarProductos();
+        cargarProductosCache();
+      } else {
+        alert('Error: ' + resultado.mensaje);
+      }
+    })
+    .withFailureHandler(function(error) { alert('Error: ' + error.message); })
+    .desactivarProducto(idProducto);
+}
+
+// ==================== PRODUCTOS — AUTOCOMPLETE EN NUEVA ORDEN ====================
+
+// Buscar productos mientras el usuario escribe en el campo de ítem
+function buscarProductoAutocomplete() {
+  var input = document.getElementById('item-buscar-producto').value.trim().toLowerCase();
+  var dropdown = document.getElementById('dropdown-productos');
+
+  if (!input || input.length < 1) {
+    dropdown.style.display = 'none';
+    return;
+  }
+
+  var resultados = productosCache.filter(function(p) {
+    return (p.nombre || '').toLowerCase().indexOf(input) !== -1 ||
+           (p.categoria || '').toLowerCase().indexOf(input) !== -1;
+  });
+
+  if (resultados.length === 0) {
+    dropdown.innerHTML = '<div class="dropdown-item-empty">No se encontraron productos</div>';
+    dropdown.style.display = 'block';
+    return;
+  }
+
+  var html = '';
+  for (var i = 0; i < resultados.length; i++) {
+    var p = resultados[i];
+    html += '<div class="dropdown-item" onclick="seleccionarProductoAutocomplete(' + p.id_producto + ')">' +
+      '<strong>' + p.nombre + '</strong>' +
+      '<span style="color:#888; font-size:12px; margin-left:8px;">' + (p.categoria || '') + '</span>' +
+      '<span style="color:#4caf50; font-size:12px; float:right;">' + formatearMoneda(p.precio_ref || 0) + '</span>' +
+    '</div>';
+  }
+  dropdown.innerHTML = html;
+  dropdown.style.display = 'block';
+}
+
+// Al seleccionar un producto del dropdown, pre-llenar los campos de ítem
+// y guardar el id_producto como FK para el Detalle_Pedido
+function seleccionarProductoAutocomplete(idProducto) {
+  var producto = null;
+  for (var i = 0; i < productosCache.length; i++) {
+    if (productosCache[i].id_producto == idProducto) {
+      producto = productosCache[i];
+      break;
+    }
+  }
+
+  if (producto) {
+    document.getElementById('item-descripcion').value = producto.nombre || '';
+    document.getElementById('item-valor').value = producto.precio_ref || '';
+    itemProductoSeleccionado = String(producto.id_producto); // Guardar FK
+  }
+
+  // Limpiar buscador y cerrar dropdown
+  document.getElementById('item-buscar-producto').value = '';
+  document.getElementById('dropdown-productos').style.display = 'none';
+}
+
+// Cerrar dropdown al hacer clic fuera
+document.addEventListener('click', function(e) {
+  var dropdown = document.getElementById('dropdown-productos');
+  var input = document.getElementById('item-buscar-producto');
+  if (dropdown && input && !dropdown.contains(e.target) && e.target !== input) {
+    dropdown.style.display = 'none';
+  }
+});
+
+// ==================== PRODUCTO INLINE — CREAR DESDE MODAL NUEVA ORDEN ====================
+
+function toggleFormNuevoProductoInline() {
+  var form = document.getElementById('form-nuevo-producto-inline');
+  var enlace = document.getElementById('btn-toggle-nuevo-producto-inline');
+  var visible = form.style.display !== 'none';
+
+  if (visible) {
+    form.style.display = 'none';
+    enlace.style.display = 'inline-flex';
+    limpiarFormProductoInline();
+  } else {
+    form.style.display = 'block';
+    enlace.style.display = 'none';
+    document.getElementById('inline-producto-nombre').focus();
+  }
+}
+
+function limpiarFormProductoInline() {
+  document.getElementById('inline-producto-nombre').value = '';
+  document.getElementById('inline-producto-categoria').value = '';
+  document.getElementById('inline-producto-precio').value = '';
+  var msg = document.getElementById('inline-producto-mensaje');
+  msg.style.display = 'none';
+  msg.className = 'inline-cliente-mensaje';
+}
+
+function guardarProductoInline() {
+  var nombre = document.getElementById('inline-producto-nombre').value.trim();
+  var msgDiv = document.getElementById('inline-producto-mensaje');
+
+  if (!nombre) {
+    msgDiv.textContent = 'El nombre del producto es obligatorio';
+    msgDiv.className = 'inline-cliente-mensaje error';
+    msgDiv.style.display = 'block';
+    return;
+  }
+
+  var datos = {
+    nombre: nombre,
+    categoria: document.getElementById('inline-producto-categoria').value.trim(),
+    precio_ref: parseFloat(document.getElementById('inline-producto-precio').value) || 0,
+    activo: 'Sí'
+  };
+
+  var btnGuardar = document.getElementById('btn-guardar-producto-inline');
+  btnGuardar.disabled = true;
+  btnGuardar.innerHTML = '<span class="material-icons" style="font-size:16px; vertical-align:middle;">hourglass_empty</span> Guardando...';
+
+  google.script.run
+    .withSuccessHandler(function(resultado) {
+      if (resultado.success) {
+        // Agregar al cache local de productos activos
+        var nuevoProducto = {
+          id_producto: resultado.id_producto,
+          nombre: datos.nombre,
+          categoria: datos.categoria,
+          precio_ref: datos.precio_ref,
+          activo: 'Sí'
+        };
+        productosCache.push(nuevoProducto);
+
+        // Pre-llenar campos del ítem con el producto creado y guardar FK
+        document.getElementById('item-descripcion').value = datos.nombre;
+        document.getElementById('item-valor').value = datos.precio_ref || '';
+        itemProductoSeleccionado = String(resultado.id_producto);
+
+        // Mensaje de éxito
+        msgDiv.textContent = 'Producto "' + datos.nombre + '" creado y seleccionado';
+        msgDiv.className = 'inline-cliente-mensaje exito';
+        msgDiv.style.display = 'block';
+
+        // Colapsar después de 1.5s
+        setTimeout(function() {
+          var form = document.getElementById('form-nuevo-producto-inline');
+          var enlace = document.getElementById('btn-toggle-nuevo-producto-inline');
+          form.style.display = 'none';
+          enlace.style.display = 'inline-flex';
+          limpiarFormProductoInline();
+        }, 1500);
+      } else {
+        msgDiv.textContent = 'Error al crear el producto';
+        msgDiv.className = 'inline-cliente-mensaje error';
+        msgDiv.style.display = 'block';
+      }
+
+      btnGuardar.disabled = false;
+      btnGuardar.innerHTML = '<span class="material-icons" style="font-size:16px; vertical-align:middle;">save</span> Guardar producto';
+    })
+    .withFailureHandler(function(error) {
+      msgDiv.textContent = 'Error: ' + error.message;
+      msgDiv.className = 'inline-cliente-mensaje error';
+      msgDiv.style.display = 'block';
+
+      btnGuardar.disabled = false;
+      btnGuardar.innerHTML = '<span class="material-icons" style="font-size:16px; vertical-align:middle;">save</span> Guardar producto';
+    })
+    .crearProducto(datos);
+}
+
 // ==================== REPORTES ====================
-function descargarExcel() {
-  var filtros = {
+
+// Obtener filtros del reporte
+function obtenerFiltrosReporte() {
+  return {
     fecha_inicio: document.getElementById('filtro-fecha-inicio').value,
     fecha_fin: document.getElementById('filtro-fecha-fin').value,
-    estado: document.getElementById('filtro-estado').value,
-    id_vendedor: document.getElementById('filtro-vendedor').value
+    estado: document.getElementById('filtro-estado-reporte').value,
+    id_vendedor: document.getElementById('filtro-vendedor').value,
+    cliente: (document.getElementById('filtro-cliente-reporte').value || '').trim().toLowerCase()
   };
+}
+
+// Filtrar y previsualizar reporte
+function filtrarReporte() {
+  console.log('[filtrarReporte] Iniciando filtrado...');
+  var tbody = document.getElementById('tbody-reporte');
+  var conteo = document.getElementById('conteo-reporte');
+  tbody.innerHTML = '<tr><td colspan="11" class="sin-datos">Cargando órdenes...</td></tr>';
+  conteo.textContent = '';
+
+  var filtrosServidor = {
+    estado: document.getElementById('filtro-estado-reporte').value || null,
+    id_vendedor: document.getElementById('filtro-vendedor').value || null
+  };
+  // Pasar null si no hay filtros de servidor
+  if (!filtrosServidor.estado && !filtrosServidor.id_vendedor) filtrosServidor = null;
+
+  google.script.run
+    .withSuccessHandler(function(ordenes) {
+      console.log('[filtrarReporte] Órdenes recibidas:', ordenes ? ordenes.length : 0);
+      if (!ordenes || ordenes.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="11" class="sin-datos">No hay órdenes con estos filtros</td></tr>';
+        conteo.textContent = 'Mostrando 0 órdenes';
+        return;
+      }
+
+      // Aplicar filtros adicionales del lado del cliente
+      var filtros = obtenerFiltrosReporte();
+      var resultado = ordenes;
+
+      // Filtro por fecha inicio
+      if (filtros.fecha_inicio) {
+        resultado = resultado.filter(function(o) {
+          return String(o.fecha || '').substring(0, 10) >= filtros.fecha_inicio;
+        });
+      }
+      // Filtro por fecha fin
+      if (filtros.fecha_fin) {
+        resultado = resultado.filter(function(o) {
+          return String(o.fecha || '').substring(0, 10) <= filtros.fecha_fin;
+        });
+      }
+      // Filtro por cliente (texto libre)
+      if (filtros.cliente) {
+        resultado = resultado.filter(function(o) {
+          return String(o.nombre_cliente || '').toLowerCase().indexOf(filtros.cliente) !== -1;
+        });
+      }
+
+      conteo.textContent = 'Mostrando ' + resultado.length + ' órdenes';
+
+      if (resultado.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="11" class="sin-datos">No hay órdenes con estos filtros</td></tr>';
+        return;
+      }
+
+      renderizarTablaReporte(resultado);
+    })
+    .withFailureHandler(function(error) {
+      console.error('[filtrarReporte] Error:', error);
+      tbody.innerHTML = '<tr><td colspan="11" class="sin-datos">Error al cargar: ' + error.message + '</td></tr>';
+      conteo.textContent = '';
+    })
+    .obtenerOrdenes(filtrosServidor);
+}
+
+// Renderizar tabla de previsualización del reporte
+function renderizarTablaReporte(ordenes) {
+  var tbody = document.getElementById('tbody-reporte');
+  var html = '';
+
+  for (var i = 0; i < ordenes.length; i++) {
+    var o = ordenes[i];
+    var fechaCorta = String(o.fecha || '').substring(0, 10);
+    var horaStr = String(o.hora_creacion || '');
+    if (horaStr.length > 10 && horaStr.indexOf(' ') !== -1) {
+      horaStr = horaStr.split(' ')[1] || horaStr;
+    }
+    var limiteCorta = o.fecha_limite_devolucion ? String(o.fecha_limite_devolucion).substring(0, 10) : '—';
+    var badgeClass = obtenerClaseBadge(o.estado);
+
+    // Color de fila según estado
+    var estiloFila = '';
+    if (o.estado === 'Por Cobrar/Devolver') estiloFila = ' style="background:#ffcccc;"';
+    else if (o.estado === 'Regresado') estiloFila = ' style="background:#f5f5f5;"';
+
+    html += '<tr' + estiloFila + '>' +
+      '<td><strong>' + (o.numero_op || '—') + '</strong></td>' +
+      '<td>' + fechaCorta + '</td>' +
+      '<td>' + (o.nombre_cliente || '—') + '</td>' +
+      '<td>' + (o.local_origen || '—') + '</td>' +
+      '<td>' + (o.nombre_vendedor || '—') + '</td>' +
+      '<td>' + (o.nombre_receptor || '—') + '</td>' +
+      '<td>' + formatearMoneda(o.valor_total || 0) + '</td>' +
+      '<td>' + horaStr + '</td>' +
+      '<td>' + limiteCorta + '</td>' +
+      '<td><span class="badge ' + badgeClass + '">' + (o.estado || '—') + '</span></td>' +
+      '<td>' + (o.observaciones || '—') + '</td>' +
+      '</tr>';
+  }
+
+  tbody.innerHTML = html;
+}
+
+// Limpiar todos los filtros del reporte y recargar
+function limpiarFiltrosReporte() {
+  document.getElementById('filtro-fecha-inicio').value = '';
+  document.getElementById('filtro-fecha-fin').value = '';
+  document.getElementById('filtro-estado-reporte').value = '';
+  document.getElementById('filtro-vendedor').value = '';
+  document.getElementById('filtro-cliente-reporte').value = '';
+  // Limpiar tabla y contador
+  document.getElementById('tbody-reporte').innerHTML =
+    '<tr><td colspan="11" class="sin-datos">Haga clic en "Filtrar" para previsualizar órdenes</td></tr>';
+  document.getElementById('conteo-reporte').textContent = '';
+}
+
+// Cargar lista de vendedores en el dropdown del reporte
+function cargarVendedoresReporte() {
+  google.script.run
+    .withSuccessHandler(function(usuarios) {
+      var select = document.getElementById('filtro-vendedor');
+      // Mantener la opción "Todos"
+      select.innerHTML = '<option value="">Todos</option>';
+      for (var i = 0; i < usuarios.length; i++) {
+        var u = usuarios[i];
+        if (u.activo === 'Sí') {
+          var option = document.createElement('option');
+          option.value = u.id_usuario;
+          option.textContent = u.nombre;
+          select.appendChild(option);
+        }
+      }
+    })
+    .obtenerUsuarios();
+}
+
+// Descargar reporte Excel usando los filtros actuales
+function descargarExcel() {
+  var filtros = obtenerFiltrosReporte();
+  // Ajustar para que el servidor entienda el estado correctamente
+  if (filtros.estado === '') filtros.estado = 'Todos';
 
   google.script.run
     .withSuccessHandler(function(resultado) {

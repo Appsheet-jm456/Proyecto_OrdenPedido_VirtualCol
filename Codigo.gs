@@ -70,7 +70,8 @@ function crearTablas() {
       'fecha_limite_devolucion',
       'dias_habiles_prestamo',
       'alerta_vencimiento',
-      'nombre_receptor'
+      'nombre_receptor',
+      'valor_total'
     ],
     'Detalle_Pedido': [
       'id_detalle',
@@ -288,6 +289,144 @@ function agregarColumnaNombreReceptor() {
 }
 
 // ============================================================
+// Migración: agregar columna valor_total a Orden_Pedido
+// Ejecutar UNA VEZ si la hoja ya existe sin esa columna
+// ============================================================
+function agregarColumnaValorTotal() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var hoja = ss.getSheetByName('Orden_Pedido');
+  if (!hoja) {
+    Logger.log('Hoja Orden_Pedido no existe');
+    return;
+  }
+
+  var encabezados = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0];
+  // Verificar si la columna ya existe
+  if (encabezados.indexOf('valor_total') !== -1) {
+    Logger.log('Columna valor_total ya existe');
+    return 'La columna ya existe';
+  }
+
+  // Agregar encabezado en la siguiente columna
+  var nuevaCol = encabezados.length + 1;
+  var celda = hoja.getRange(1, nuevaCol);
+  celda.setValue('valor_total');
+  celda.setBackground('#ffcf22');
+  celda.setFontWeight('bold');
+  celda.setHorizontalAlignment('center');
+  celda.setFontColor('#1a1a1a');
+
+  Logger.log('Columna valor_total agregada en posición ' + nuevaCol);
+  return 'Columna valor_total agregada exitosamente';
+}
+
+// ============================================================
+// Recalcular valor_total de todas las órdenes existentes
+// Suma valor_total de Detalle_Pedido para cada orden
+// Ejecutar UNA VEZ después de agregarColumnaValorTotal()
+// ============================================================
+function recalcularValoresTotales() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var hojaOP = ss.getSheetByName('Orden_Pedido');
+  var hojaDetalle = ss.getSheetByName('Detalle_Pedido');
+
+  if (!hojaOP || !hojaDetalle) {
+    Logger.log('Error: hojas no encontradas');
+    return;
+  }
+
+  var datosOP = hojaOP.getDataRange().getValues();
+  var datosDetalle = hojaDetalle.getDataRange().getValues();
+  var encabezadosOP = datosOP[0];
+
+  // Buscar índice de la columna valor_total en Orden_Pedido
+  var colValorTotal = encabezadosOP.indexOf('valor_total');
+  if (colValorTotal === -1) {
+    Logger.log('Columna valor_total no existe. Ejecuta agregarColumnaValorTotal() primero.');
+    return;
+  }
+
+  // Construir mapa de totales por id_op desde Detalle_Pedido
+  // Columnas en Detalle_Pedido: 0=id_detalle, 1=id_op, 6=valor_total
+  var totalesPorOrden = {};
+  for (var d = 1; d < datosDetalle.length; d++) {
+    var idOp = String(datosDetalle[d][1]);
+    var valorItem = Number(datosDetalle[d][6]) || 0;
+    totalesPorOrden[idOp] = (totalesPorOrden[idOp] || 0) + valorItem;
+  }
+
+  // Actualizar cada orden con su valor_total calculado
+  var actualizadas = 0;
+  for (var i = 1; i < datosOP.length; i++) {
+    var idOrden = String(datosOP[i][0]);
+    var valorCalculado = totalesPorOrden[idOrden] || 0;
+    hojaOP.getRange(i + 1, colValorTotal + 1).setValue(valorCalculado);
+    actualizadas++;
+  }
+
+  Logger.log('Valores recalculados para ' + actualizadas + ' órdenes');
+  return 'Recalculadas ' + actualizadas + ' órdenes';
+}
+
+// ============================================================
+// Migración: convertir id_op numérico a UUID alfanumérico
+// EJECUTAR UNA SOLA VEZ desde el editor de Apps Script
+// Actualiza Orden_Pedido (col A) y Detalle_Pedido (col B)
+// ============================================================
+function migracionIdOp() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var hojaOP = ss.getSheetByName('Orden_Pedido');
+  var hojaDetalle = ss.getSheetByName('Detalle_Pedido');
+
+  if (!hojaOP || !hojaDetalle) {
+    Logger.log('Error: hojas no encontradas');
+    return;
+  }
+
+  var datosOP = hojaOP.getDataRange().getValues();
+  var datosDetalle = hojaDetalle.getDataRange().getValues();
+  var migradas = 0;
+
+  for (var i = 1; i < datosOP.length; i++) {
+    var idActual = datosOP[i][0];
+
+    // Solo migrar si el id_op actual es numérico (no UUID)
+    if (idActual === '' || idActual === null || idActual === undefined) continue;
+    var idStr = String(idActual);
+
+    // Si ya parece UUID (contiene letras), saltar
+    if (/[A-Za-z]/.test(idStr)) continue;
+
+    // Generar nuevo UUID para esta orden
+    var nuevoUuid = generarIdUnico();
+
+    // Actualizar id_op en Orden_Pedido (columna A)
+    hojaOP.getRange(i + 1, 1).setValue(nuevoUuid);
+
+    // Actualizar id_op FK en todas las filas de Detalle_Pedido que coincidan
+    for (var d = 1; d < datosDetalle.length; d++) {
+      if (String(datosDetalle[d][1]) === idStr) {
+        hojaDetalle.getRange(d + 1, 2).setValue(nuevoUuid);
+        datosDetalle[d][1] = nuevoUuid; // Actualizar en memoria para evitar re-migración
+
+        // También migrar id_detalle si es numérico
+        var idDetalleActual = String(datosDetalle[d][0]);
+        if (!/[A-Za-z]/.test(idDetalleActual)) {
+          var nuevoIdDetalle = generarIdUnico();
+          hojaDetalle.getRange(d + 1, 1).setValue(nuevoIdDetalle);
+        }
+      }
+    }
+
+    migradas++;
+    Logger.log('Orden migrada: ' + idStr + ' → ' + nuevoUuid);
+  }
+
+  Logger.log('=== Migración completada. Órdenes migradas: ' + migradas + ' ===');
+  return 'Migración completada: ' + migradas + ' órdenes actualizadas a UUID';
+}
+
+// ============================================================
 // Función de inicialización completa
 // Ejecutar esta para configurar todo de una vez
 // ============================================================
@@ -426,6 +565,8 @@ function crearCliente(datos) {
 // ============================================================
 // CRUD — PRODUCTOS
 // ============================================================
+
+// Obtener solo productos activos (para autocomplete en órdenes)
 function obtenerProductos() {
   var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   var hoja = ss.getSheetByName('Productos');
@@ -445,30 +586,135 @@ function obtenerProductos() {
   return resultado;
 }
 
+// Obtener todos los productos (activos e inactivos) para gestión admin
+function listarProductos() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var hoja = ss.getSheetByName('Productos');
+  var datos = hoja.getDataRange().getValues();
+  var encabezados = datos[0];
+  var resultado = [];
+
+  for (var i = 1; i < datos.length; i++) {
+    var obj = {};
+    for (var j = 0; j < encabezados.length; j++) {
+      obj[encabezados[j]] = datos[i][j];
+    }
+    // Saltar filas vacías
+    if (obj.id_producto || obj.id_producto === 0) {
+      resultado.push(obj);
+    }
+  }
+  return resultado;
+}
+
+// Crear nuevo producto
+function crearProducto(datos) {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var hoja = ss.getSheetByName('Productos');
+  var ultimaFila = hoja.getLastRow();
+  var nuevoId = ultimaFila; // ID = número de fila - 1
+
+  var fila = [
+    nuevoId,
+    datos.nombre,
+    datos.categoria || '',
+    datos.descripcion || '',
+    datos.precio_ref || 0,
+    datos.activo || 'Sí'
+  ];
+
+  hoja.appendRow(fila);
+  return { success: true, id_producto: nuevoId };
+}
+
+// Actualizar producto existente
+function actualizarProducto(idProducto, datos) {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var hoja = ss.getSheetByName('Productos');
+  var filas = hoja.getDataRange().getValues();
+
+  for (var i = 1; i < filas.length; i++) {
+    if (String(filas[i][0]) === String(idProducto)) {
+      var fila = i + 1; // Fila en la hoja (1-indexed)
+      hoja.getRange(fila, 2).setValue(datos.nombre);
+      hoja.getRange(fila, 3).setValue(datos.categoria || '');
+      hoja.getRange(fila, 4).setValue(datos.descripcion || '');
+      hoja.getRange(fila, 5).setValue(datos.precio_ref || 0);
+      hoja.getRange(fila, 6).setValue(datos.activo || 'Sí');
+      return { success: true };
+    }
+  }
+  return { success: false, mensaje: 'Producto no encontrado' };
+}
+
+// Desactivar producto (soft-delete)
+function desactivarProducto(idProducto) {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var hoja = ss.getSheetByName('Productos');
+  var filas = hoja.getDataRange().getValues();
+
+  for (var i = 1; i < filas.length; i++) {
+    if (String(filas[i][0]) === String(idProducto)) {
+      var fila = i + 1;
+      hoja.getRange(fila, 6).setValue('No'); // columna activo
+      return { success: true };
+    }
+  }
+  return { success: false, mensaje: 'Producto no encontrado' };
+}
+
+// ============================================================
+// GENERADOR DE ID ÚNICO (UUID alfanumérico de 12 caracteres)
+// ============================================================
+function generarIdUnico() {
+  // Genera ID alfanumérico único de 12 caracteres en mayúsculas
+  // Ejemplo resultado: "A3F9B2C1D4E5"
+  return Utilities.getUuid().replace(/-/g, '').substring(0, 12).toUpperCase();
+}
+
 // ============================================================
 // CRUD — ÓRDENES DE PEDIDO
 // ============================================================
+// Generar número de OP con consecutivo GLOBAL que nunca reinicia
+// Formato: OP-YYYYMMDD-NNN donde NNN es progresivo independiente del día
+// Usa LockService para evitar duplicados por concurrencia
 function generarNumeroOP() {
-  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  var hoja = ss.getSheetByName('Orden_Pedido');
-  var datos = hoja.getDataRange().getValues();
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000); // Esperar hasta 10 segundos para obtener el lock
 
-  var hoy = new Date();
-  var fechaStr = Utilities.formatDate(hoy, 'America/Bogota', 'yyyyMMdd');
-  var prefijo = 'OP-' + fechaStr + '-';
+    var props = PropertiesService.getScriptProperties();
+    var ultimoConsecutivo = props.getProperty('ultimo_consecutivo_op');
 
-  var correlativo = 0;
-  for (var i = 1; i < datos.length; i++) {
-    var numOP = datos[i][1]; // columna numero_op
-    if (typeof numOP === 'string' && numOP.indexOf(prefijo) === 0) {
-      var num = parseInt(numOP.replace(prefijo, ''), 10);
-      if (num > correlativo) correlativo = num;
+    if (ultimoConsecutivo === null) {
+      // Primera vez: inicializar con la cantidad de órdenes existentes
+      var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+      var hoja = ss.getSheetByName('Orden_Pedido');
+      var totalFilas = hoja.getLastRow() - 1; // Restar encabezado
+      ultimoConsecutivo = totalFilas > 0 ? totalFilas : 0;
+    } else {
+      ultimoConsecutivo = parseInt(ultimoConsecutivo, 10) || 0;
     }
-  }
 
-  correlativo++;
-  var numFormateado = ('000' + correlativo).slice(-3);
-  return prefijo + numFormateado;
+    // Incrementar consecutivo
+    var nuevoConsecutivo = ultimoConsecutivo + 1;
+
+    // Guardar en PropertiesService
+    props.setProperty('ultimo_consecutivo_op', String(nuevoConsecutivo));
+
+    lock.releaseLock();
+
+    // Construir número OP con fecha actual (Colombia) y consecutivo global
+    var hoy = new Date();
+    var fechaStr = Utilities.formatDate(hoy, 'America/Bogota', 'yyyyMMdd');
+    var numFormateado = ('000' + nuevoConsecutivo).slice(-3);
+    return 'OP-' + fechaStr + '-' + numFormateado;
+
+  } catch (e) {
+    // Si falla el lock, intentar liberar y lanzar error
+    try { lock.releaseLock(); } catch(ignored) {}
+    throw new Error('No se pudo generar el número de OP: ' + e.message);
+  }
 }
 
 function crearOrden(datosOrden, detalleItems) {
@@ -476,18 +722,24 @@ function crearOrden(datosOrden, detalleItems) {
   var hojaOP = ss.getSheetByName('Orden_Pedido');
   var hojaDetalle = ss.getSheetByName('Detalle_Pedido');
 
-  var ultimaFilaOP = hojaOP.getLastRow();
-  var nuevoIdOP = ultimaFilaOP;
+  // Generar UUID alfanumérico como id_op (llave primaria única)
+  var nuevoIdOP = generarIdUnico();
   var numeroOP = generarNumeroOP();
 
   var ahora = new Date();
   var fecha = Utilities.formatDate(ahora, 'America/Bogota', 'yyyy-MM-dd');
   var hora = Utilities.formatDate(ahora, 'America/Bogota', 'HH:mm:ss');
 
-  // Insertar orden
+  // Calcular valor total de la orden sumando los ítems del detalle
+  var valorTotalOrden = 0;
+  for (var t = 0; t < detalleItems.length; t++) {
+    valorTotalOrden += (detalleItems[t].cantidad || 0) * (detalleItems[t].valor_unitario || 0);
+  }
+
+  // Insertar orden con id_op UUID
   var filaOrden = [
-    nuevoIdOP,                    // id_op
-    numeroOP,                     // numero_op
+    nuevoIdOP,                    // id_op (UUID alfanumérico)
+    numeroOP,                     // numero_op (OP-YYYYMMDD-NNN visible)
     datosOrden.id_cliente,        // id_cliente
     datosOrden.id_vendedor,       // id_vendedor
     fecha,                        // fecha
@@ -499,23 +751,22 @@ function crearOrden(datosOrden, detalleItems) {
     '',                           // fecha_limite_devolucion
     1,                            // dias_habiles_prestamo (por defecto 1)
     '',                           // alerta_vencimiento
-    datosOrden.nombre_receptor || '' // nombre_receptor (quien recibe el equipo)
+    datosOrden.nombre_receptor || '', // nombre_receptor (quien recibe el equipo)
+    valorTotalOrden               // valor_total
   ];
 
   hojaOP.appendRow(filaOrden);
 
-  // Insertar detalle de cada ítem
-  var ultimaFilaDetalle = hojaDetalle.getLastRow();
-
+  // Insertar detalle de cada ítem con id_detalle UUID y FK id_op UUID
   for (var i = 0; i < detalleItems.length; i++) {
     var item = detalleItems[i];
-    var idDetalle = ultimaFilaDetalle + i;
+    var idDetalle = generarIdUnico(); // UUID único para cada ítem
     var valorTotal = (item.cantidad || 0) * (item.valor_unitario || 0);
 
     var filaDetalle = [
-      idDetalle,                       // id_detalle
-      nuevoIdOP,                       // id_op
-      item.id_producto || '',          // id_producto
+      idDetalle,                       // id_detalle (UUID)
+      nuevoIdOP,                       // id_op (FK → Orden_Pedido, UUID)
+      item.id_producto || '',          // id_producto (FK → Productos, o vacío si texto libre)
       item.descripcion_libre || '',    // descripcion_libre
       item.cantidad || 0,              // cantidad
       item.valor_unitario || 0,        // valor_unitario
@@ -543,12 +794,25 @@ function obtenerOrdenes(filtros) {
     if (!hojaClientes) throw new Error('Hoja "Clientes" no encontrada');
     if (!hojaUsuarios) throw new Error('Hoja "Usuarios" no encontrada');
 
+    var hojaDetalle = ss.getSheetByName('Detalle_Pedido');
+    if (!hojaDetalle) throw new Error('Hoja "Detalle_Pedido" no encontrada');
+
     var datosOP = hojaOP.getDataRange().getValues();
     var datosClientes = hojaClientes.getDataRange().getValues();
     var datosUsuarios = hojaUsuarios.getDataRange().getValues();
+    var datosDetalle = hojaDetalle.getDataRange().getValues();
 
     // Si solo hay encabezados, retornar vacío
     if (datosOP.length <= 1) return [];
+
+    // Construir mapa de valor_total por id_op desde Detalle_Pedido
+    // Columnas: 0=id_detalle, 1=id_op, 6=valor_total
+    var totalesPorOrden = {};
+    for (var d = 1; d < datosDetalle.length; d++) {
+      var idOpDetalle = String(datosDetalle[d][1]);
+      var valorItem = Number(datosDetalle[d][6]) || 0;
+      totalesPorOrden[idOpDetalle] = (totalesPorOrden[idOpDetalle] || 0) + valorItem;
+    }
 
     // Mapas para lookup rápido (convertir clave a string para evitar desajuste de tipos)
     var mapaClientes = {};
@@ -585,6 +849,9 @@ function obtenerOrdenes(filtros) {
       // Agregar nombres legibles (usar String() para asegurar match de tipos)
       obj.nombre_cliente = mapaClientes[String(obj.id_cliente)] || 'Desconocido';
       obj.nombre_vendedor = mapaUsuarios[String(obj.id_vendedor)] || 'Desconocido';
+
+      // Calcular valor_total desde Detalle_Pedido (fuente confiable)
+      obj.valor_total = totalesPorOrden[String(obj.id_op)] || 0;
 
       // Aplicar filtros
       var incluir = true;
@@ -664,7 +931,7 @@ function actualizarEstadoOrden(idOp, nuevoEstado, observaciones, nombreReceptor)
   var hora = Utilities.formatDate(ahora, 'America/Bogota', 'HH:mm:ss');
 
   for (var i = 1; i < datos.length; i++) {
-    if (datos[i][0] == idOp) {
+    if (String(datos[i][0]) === String(idOp)) {
       var fila = i + 1; // Fila en la hoja (1-indexed)
 
       // Actualizar estado (columna 7)
@@ -685,7 +952,7 @@ function actualizarEstadoOrden(idOp, nuevoEstado, observaciones, nombreReceptor)
         // Actualizar hora_entrega en detalle
         var datosDetalle = hojaDetalle.getDataRange().getValues();
         for (var d = 1; d < datosDetalle.length; d++) {
-          if (datosDetalle[d][1] == idOp) {
+          if (String(datosDetalle[d][1]) === String(idOp)) {
             hojaDetalle.getRange(d + 1, 9).setValue(hora); // hora_entrega
             hojaDetalle.getRange(d + 1, 8).setValue(ESTADOS.PRESTADO); // estado_item
           }
@@ -696,7 +963,7 @@ function actualizarEstadoOrden(idOp, nuevoEstado, observaciones, nombreReceptor)
       if (nuevoEstado === ESTADOS.REGRESADO) {
         var datosDetalle2 = hojaDetalle.getDataRange().getValues();
         for (var d2 = 1; d2 < datosDetalle2.length; d2++) {
-          if (datosDetalle2[d2][1] == idOp) {
+          if (String(datosDetalle2[d2][1]) === String(idOp)) {
             hojaDetalle.getRange(d2 + 1, 10).setValue(hora); // hora_regreso
             hojaDetalle.getRange(d2 + 1, 8).setValue(ESTADOS.REGRESADO); // estado_item
           }
