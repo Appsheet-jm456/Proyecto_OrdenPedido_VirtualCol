@@ -1,0 +1,2451 @@
+<script>
+// ============================================================
+// Javascript.html — Lógica del cliente
+// Sistema de Órdenes de Pedido — Ventas Virtuales Colombia
+// ============================================================
+
+// Estado global
+var sesionToken = null;
+var usuarioActual = null;
+var ordenesCache = [];
+var clientesCache = [];
+var productosCache = [];
+var itemsNuevaOrden = [];
+var ordenSeleccionada = null;
+var detalleOrdenActual = []; // Detalle de productos de la orden en vista
+var filtroEstadoActual = null;
+// Parámetros de consecutivo — se gestionan en sección propia, NO en la tabla general de config
+var PARAMS_CONSECUTIVO = ['consecutivo_inicio', 'consecutivo_fin', 'consecutivo_actual'];
+var itemProductoSeleccionado = ''; // id_producto del autocomplete (vacío si texto libre)
+window.appConfig = {}; // Configuración global del negocio
+
+// ==================== CARGA INICIAL DE CONFIGURACIÓN ====================
+// Se ejecuta al cargar la página, antes de mostrar el login
+(function cargarConfigInicial() {
+  var timeout = setTimeout(function() {
+    // Si tarda más de 3 segundos, mostrar login con valores por defecto
+    mostrarLoginConConfig();
+  }, 3000);
+
+  google.script.run
+    .withSuccessHandler(function(config) {
+      clearTimeout(timeout);
+      window.appConfig = config;
+      mostrarLoginConConfig();
+    })
+    .withFailureHandler(function() {
+      clearTimeout(timeout);
+      // Usar valores por defecto
+      window.appConfig = {
+        nombre_comercial: 'Ventas Virtuales Colombia',
+        direccion: 'Av 5 a # 23 D Norte - 66 Ctro Comercial Pasarela Local 2 - 107',
+        celular: '3175591252',
+        correo: 'rafyta1995@gmail.com',
+        logo_url: '',
+        ciudad: 'Cali, Colombia',
+        nombre_juridico: 'Rafael Alfonso Perez Chavarro'
+      };
+      mostrarLoginConConfig();
+    })
+    .getConfiguracion();
+})();
+
+// Renderizar login con datos de configuración
+function mostrarLoginConConfig() {
+  var config = window.appConfig;
+
+  // Ocultar spinner, mostrar contenido
+  var loading = document.getElementById('login-loading');
+  var contenido = document.getElementById('login-contenido');
+  if (loading) loading.style.display = 'none';
+  if (contenido) contenido.style.display = 'block';
+
+  // Logo dinámico
+  if (config.logo_url) {
+    var imgLogin = document.getElementById('login-logo-img');
+    imgLogin.src = config.logo_url;
+    imgLogin.onload = function() { imgLogin.style.display = 'block'; };
+    imgLogin.onerror = function() { imgLogin.style.display = 'none'; };
+  }
+
+  // Nombre comercial
+  if (config.nombre_comercial) {
+    var partes = config.nombre_comercial.split(' ');
+    // Intentar partir el nombre en dos líneas si tiene más de 2 palabras
+    var nombreEl = document.getElementById('login-nombre-comercial');
+    if (partes.length > 2) {
+      var mitad = Math.ceil(partes.length / 2);
+      nombreEl.innerHTML = partes.slice(0, mitad).join(' ') + '<br>' + partes.slice(mitad).join(' ');
+    } else {
+      nombreEl.textContent = config.nombre_comercial;
+    }
+  }
+
+  // Ciudad
+  if (config.ciudad) {
+    document.getElementById('login-ciudad').textContent = config.ciudad;
+  }
+
+  // Footer con dirección y celular
+  if (config.direccion || config.celular) {
+    var footer = document.getElementById('login-footer');
+    var html = '';
+    if (config.direccion) html += config.direccion;
+    if (config.celular) html += '<br>Cel: ' + config.celular;
+    footer.innerHTML = html;
+  }
+}
+
+// ==================== AUTENTICACIÓN ====================
+function iniciarSesion() {
+  var email = document.getElementById('login-email').value.trim();
+  var password = document.getElementById('login-password').value;
+
+  if (!email || !password) {
+    mostrarErrorLogin('Ingrese correo y contraseña');
+    return;
+  }
+
+  google.script.run
+    .withSuccessHandler(function(resultado) {
+      if (resultado.success) {
+        sesionToken = resultado.token;
+        usuarioActual = resultado.usuario;
+        mostrarDashboard();
+      } else {
+        mostrarErrorLogin(resultado.mensaje);
+      }
+    })
+    .withFailureHandler(function(error) {
+      mostrarErrorLogin('Error de conexión: ' + error.message);
+    })
+    .autenticarUsuario(email, password);
+}
+
+function mostrarErrorLogin(mensaje) {
+  var errorDiv = document.getElementById('login-error');
+  errorDiv.textContent = mensaje;
+  errorDiv.style.display = 'block';
+}
+
+function cerrarSesion() {
+  if (sesionToken) {
+    google.script.run.cerrarSesion(sesionToken);
+  }
+  sesionToken = null;
+  usuarioActual = null;
+  document.getElementById('pantalla-dashboard').style.display = 'none';
+  document.getElementById('pantalla-login').style.display = 'flex';
+  document.getElementById('login-email').value = '';
+  document.getElementById('login-password').value = '';
+  document.getElementById('login-error').style.display = 'none';
+  // Cerrar sidebar mobile si estaba abierto
+  cerrarSidebarMobile();
+}
+
+// ==================== DASHBOARD ====================
+function mostrarDashboard() {
+  document.getElementById('pantalla-login').style.display = 'none';
+  document.getElementById('pantalla-dashboard').style.display = 'block';
+
+  // Mostrar info del usuario en el sidebar
+  var nombreUsuario = usuarioActual.nombre || '';
+  document.getElementById('sidebar-usuario-nombre').textContent = nombreUsuario;
+  document.getElementById('sidebar-usuario-rol').textContent = usuarioActual.rol || '';
+
+  // Generar iniciales para el avatar
+  var iniciales = nombreUsuario.split(' ').map(function(p) { return p.charAt(0); }).join('').substring(0, 2).toUpperCase();
+  document.getElementById('sidebar-avatar').textContent = iniciales || 'VV';
+
+  // Mostrar navegación según rol
+  aplicarPermisosPorRol(usuarioActual.rol);
+
+  // Inicializar sidebar (restaurar estado colapsado/expandido)
+  inicializarSidebar();
+
+  // Aplicar configuración al sidebar
+  aplicarConfigDashboard();
+
+  cargarContadores();
+  cargarOrdenes();
+  cargarClientes();
+  cargarProductosCache();
+  cargarVendedoresReporte();
+}
+
+// Aplicar datos de appConfig al sidebar y print header
+function aplicarConfigDashboard() {
+  var config = window.appConfig;
+
+  // Logo en sidebar
+  if (config.logo_url) {
+    var sidebarLogo = document.getElementById('sidebar-logo-img');
+    sidebarLogo.src = config.logo_url;
+    sidebarLogo.onload = function() { sidebarLogo.style.display = 'block'; };
+    sidebarLogo.onerror = function() { sidebarLogo.style.display = 'none'; };
+  }
+
+  // Nombre en sidebar (texto corto para el sidebar)
+  if (config.nombre_comercial) {
+    document.getElementById('sidebar-nombre-comercial').textContent = config.nombre_comercial;
+  }
+
+  // Print header para PDF
+  if (config.logo_url) {
+    var printLogo = document.getElementById('print-logo-img');
+    printLogo.src = config.logo_url;
+    printLogo.onerror = function() { printLogo.style.display = 'none'; };
+  }
+  if (config.nombre_comercial) {
+    document.getElementById('print-nombre-comercial').textContent = config.nombre_comercial;
+  }
+  if (config.direccion) {
+    document.getElementById('print-direccion').textContent = config.direccion;
+  }
+  if (config.celular || config.correo) {
+    document.getElementById('print-contacto').textContent =
+      'Cel: ' + (config.celular || '') + ' | ' + (config.correo || '');
+  }
+}
+
+// Mapa de títulos para cada módulo
+var TITULOS_MODULO = {
+  ordenes: 'Órdenes de Pedido',
+  clientes: 'Clientes',
+  productos: 'Productos',
+  usuarios: 'Gestión de Usuarios',
+  reportes: 'Reportes',
+  configuracion: 'Configuración',
+  'nueva-orden': 'Nueva Orden de Pedido',
+  'ver-orden': 'Ver / Gestionar Orden'
+};
+
+// Submódulos: no actualizan el nav activo ni recargan datos
+var MODULOS_SUB = ['nueva-orden', 'ver-orden'];
+
+// Cambiar módulo activo (reemplaza cambiarTab)
+function mostrarModulo(nombreModulo) {
+  var esSubmodulo = MODULOS_SUB.indexOf(nombreModulo) !== -1;
+
+  // 1. Actualizar nav activo solo en módulos principales
+  if (!esSubmodulo) {
+    var navItems = document.querySelectorAll('.sidebar-nav .nav-item');
+    for (var i = 0; i < navItems.length; i++) {
+      navItems[i].classList.remove('activo');
+    }
+    var navActivo = document.querySelector('.nav-item[data-modulo="' + nombreModulo + '"]');
+    if (navActivo) navActivo.classList.add('activo');
+  }
+
+  // 2. Ocultar todos los módulos
+  var modulos = document.querySelectorAll('.modulo');
+  for (var j = 0; j < modulos.length; j++) {
+    modulos[j].classList.add('oculto');
+  }
+
+  // 3. Mostrar el módulo seleccionado
+  var moduloActivo = document.getElementById('modulo-' + nombreModulo);
+  if (moduloActivo) moduloActivo.classList.remove('oculto');
+
+  // 4. Actualizar título del topbar
+  var titulo = TITULOS_MODULO[nombreModulo] || nombreModulo;
+  document.getElementById('titulo-modulo').textContent = titulo;
+
+  // 5. Mostrar/ocultar botón Nueva Orden (solo en módulo órdenes)
+  var btnNueva = document.getElementById('btn-nueva-orden-topbar');
+  if (btnNueva) {
+    btnNueva.style.display = (nombreModulo === 'ordenes') ? 'flex' : 'none';
+  }
+
+  // 6. Cargar datos según módulo (no para submódulos)
+  if (!esSubmodulo) {
+    if (nombreModulo === 'ordenes') { cargarOrdenes(); cargarContadores(); }
+    if (nombreModulo === 'clientes') cargarClientes();
+    if (nombreModulo === 'productos') cargarProductos();
+    if (nombreModulo === 'usuarios') cargarUsuarios();
+    if (nombreModulo === 'configuracion') cargarConfiguracion();
+  }
+
+  // 7. Cerrar sidebar en mobile al navegar
+  cerrarSidebarMobile();
+}
+
+// Compatibilidad: alias para código que aún llame a cambiarTab
+function cambiarTab(tab) {
+  mostrarModulo(tab);
+}
+
+// ==================== CONTADORES ====================
+function cargarContadores() {
+  google.script.run
+    .withSuccessHandler(function(contadores) {
+      actualizarContadores(contadores);
+    })
+    .obtenerContadores();
+}
+
+// Actualizar los chips de contadores con los datos del servidor
+function actualizarContadores(contadores) {
+  document.getElementById('count-pendiente').textContent = contadores['Pendiente'] || 0;
+  document.getElementById('count-prestado').textContent = contadores['Prestado'] || 0;
+  document.getElementById('count-cobrar').textContent = contadores['Por Cobrar/Devolver'] || 0;
+  document.getElementById('count-facturado').textContent = contadores['Facturado'] || 0;
+  document.getElementById('count-regresado').textContent = contadores['Regresado'] || 0;
+
+  // Parpadeo si hay Por Cobrar/Devolver
+  var chipCobrar = document.getElementById('chip-cobrar');
+  if ((contadores['Por Cobrar/Devolver'] || 0) > 0) {
+    chipCobrar.classList.add('tiene-alertas');
+  } else {
+    chipCobrar.classList.remove('tiene-alertas');
+  }
+}
+
+// Filtrar desde los chips de estado (nueva función)
+function filtrarPorEstadoChip(estado) {
+  // Quitar clase 'activo-chip' de todos los chips
+  var chips = document.querySelectorAll('.contador-chip');
+  for (var i = 0; i < chips.length; i++) {
+    chips[i].classList.remove('activo-chip');
+  }
+
+  if (estado === 'Todos') {
+    // Limpiar filtro
+    filtroEstadoActual = null;
+    document.getElementById('chip-todos').classList.add('activo-chip');
+  } else {
+    // Aplicar filtro
+    filtroEstadoActual = estado;
+    // Buscar el chip correspondiente y marcarlo como activo
+    var mapaChips = {
+      'Pendiente': 'chip-pendiente',
+      'Prestado': 'chip-prestado',
+      'Por Cobrar/Devolver': 'chip-cobrar',
+      'Facturado': 'chip-facturado',
+      'Regresado': 'chip-regresado'
+    };
+    var chipId = mapaChips[estado];
+    if (chipId) document.getElementById(chipId).classList.add('activo-chip');
+  }
+
+  // Sincronizar con el dropdown de filtros
+  var selectEstado = document.getElementById('filtro-op-estado');
+  if (selectEstado) {
+    selectEstado.value = filtroEstadoActual || '';
+  }
+  renderizarOrdenes();
+}
+
+// Función original de filtrado (mantener compatibilidad con dropdown)
+function filtrarPorEstado(estado) {
+  filtrarPorEstadoChip(estado);
+}
+
+// ==================== FILTROS DINÁMICOS DE ÓRDENES ====================
+
+// Aplicar todos los filtros combinados (AND) sobre el cache de órdenes
+function aplicarFiltrosOrdenes() {
+  // Sincronizar el filtro de estado del sidebar con el dropdown
+  var estadoDropdown = document.getElementById('filtro-op-estado').value;
+  filtroEstadoActual = estadoDropdown || null;
+  renderizarOrdenes();
+}
+
+// Limpiar todos los filtros y mostrar todas las órdenes
+function limpiarFiltrosOrdenes() {
+  document.getElementById('filtro-op-numero').value = '';
+  document.getElementById('filtro-op-cliente').value = '';
+  document.getElementById('filtro-op-estado').value = '';
+  document.getElementById('filtro-op-fecha-desde').value = '';
+  document.getElementById('filtro-op-fecha-hasta').value = '';
+  filtroEstadoActual = null;
+  renderizarOrdenes();
+}
+
+// Obtener órdenes filtradas según todos los criterios activos
+function obtenerOrdenesFiltradas() {
+  var ordenes = ordenesCache;
+  var totalSinFiltro = ordenes.length;
+
+  // Filtro por N° OP (búsqueda parcial)
+  var filtroNumero = (document.getElementById('filtro-op-numero').value || '').trim().toLowerCase();
+  if (filtroNumero) {
+    ordenes = ordenes.filter(function(o) {
+      return String(o.numero_op || '').toLowerCase().indexOf(filtroNumero) !== -1;
+    });
+  }
+
+  // Filtro por cliente (búsqueda parcial)
+  var filtroCliente = (document.getElementById('filtro-op-cliente').value || '').trim().toLowerCase();
+  if (filtroCliente) {
+    ordenes = ordenes.filter(function(o) {
+      return String(o.nombre_cliente || '').toLowerCase().indexOf(filtroCliente) !== -1;
+    });
+  }
+
+  // Filtro por estado (del dropdown o del sidebar)
+  if (filtroEstadoActual) {
+    ordenes = ordenes.filter(function(o) {
+      return o.estado === filtroEstadoActual;
+    });
+  }
+
+  // Filtro por fecha desde
+  var fechaDesde = document.getElementById('filtro-op-fecha-desde').value;
+  if (fechaDesde) {
+    ordenes = ordenes.filter(function(o) {
+      var fechaOrden = String(o.fecha || '').substring(0, 10);
+      return fechaOrden >= fechaDesde;
+    });
+  }
+
+  // Filtro por fecha hasta
+  var fechaHasta = document.getElementById('filtro-op-fecha-hasta').value;
+  if (fechaHasta) {
+    ordenes = ordenes.filter(function(o) {
+      var fechaOrden = String(o.fecha || '').substring(0, 10);
+      return fechaOrden <= fechaHasta;
+    });
+  }
+
+  return { ordenes: ordenes, total: totalSinFiltro };
+}
+
+// ==================== ÓRDENES ====================
+function cargarOrdenes() {
+  console.log('[cargarOrdenes] Iniciando carga de órdenes...');
+  google.script.run
+    .withSuccessHandler(function(ordenes) {
+      console.log('[cargarOrdenes] Respuesta recibida. Órdenes:', ordenes ? ordenes.length : 'null');
+      ordenesCache = ordenes || [];
+      renderizarOrdenes();
+    })
+    .withFailureHandler(function(error) {
+      console.error('[cargarOrdenes] Error del servidor:', error);
+      document.getElementById('tbody-ordenes').innerHTML =
+        '<tr><td colspan="8" class="sin-datos">Error al cargar órdenes: ' + error.message + '</td></tr>';
+    })
+    .obtenerOrdenes(null);
+}
+
+function renderizarOrdenes() {
+  var tbody = document.getElementById('tbody-ordenes');
+
+  try {
+    // Obtener órdenes filtradas con todos los criterios combinados
+    var resultado = obtenerOrdenesFiltradas();
+    var ordenes = resultado.ordenes;
+    var total = resultado.total;
+    console.log('[renderizarOrdenes] Mostrando', ordenes.length, 'de', total);
+
+    // Actualizar contador
+    var conteo = document.getElementById('conteo-ordenes');
+    if (conteo) {
+      if (ordenes.length === total) {
+        conteo.textContent = 'Mostrando ' + total + ' órdenes';
+      } else {
+        conteo.textContent = 'Mostrando ' + ordenes.length + ' de ' + total + ' órdenes';
+      }
+    }
+
+    if (ordenes.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" class="sin-datos">No hay órdenes con estos filtros</td></tr>';
+      var cardsMobileVacio = document.getElementById('cards-ordenes-mobile');
+      if (cardsMobileVacio) cardsMobileVacio.innerHTML = '<p style="text-align:center;color:#aaa;padding:40px;">No hay órdenes con estos filtros</p>';
+      return;
+    }
+
+    var html = '';
+    var htmlCards = '';
+    for (var i = 0; i < ordenes.length; i++) {
+      var o = ordenes[i];
+      var badgeClass = obtenerClaseBadge(o.estado);
+
+      // Extraer solo la parte de fecha (yyyy-MM-dd) de forma segura
+      var fechaCorta = String(o.fecha || '').substring(0, 10);
+      var fechaHtml = fechaCorta;
+
+      if (o.estado === 'Prestado' && o.fecha_limite_devolucion) {
+        var limiteCorta = String(o.fecha_limite_devolucion).substring(0, 10);
+        fechaHtml += '<br><small class="texto-rojo">Límite: ' + limiteCorta + '</small>';
+      }
+
+      // Extraer solo la hora (HH:mm:ss) de forma segura
+      var horaStr = String(o.hora_creacion || '');
+      if (horaStr.length > 10 && horaStr.indexOf(' ') !== -1) {
+        horaStr = horaStr.split(' ')[1] || horaStr;
+      }
+
+      // Columna vendedor + receptor
+      var vendedorHtml = '<small style="color:#888;">Vendedor:</small> ' + (o.nombre_vendedor || '—');
+      if (o.nombre_receptor) {
+        vendedorHtml += '<br><small style="color:#888;">Recibe:</small> <strong>' + o.nombre_receptor + '</strong>';
+      }
+
+      // Fila de tabla (desktop/tablet)
+      html += '<tr>' +
+        '<td><strong>' + (o.numero_op || '—') + '</strong></td>' +
+        '<td>' + fechaHtml + '</td>' +
+        '<td>' + (o.nombre_cliente || '—') + '</td>' +
+        '<td>' + vendedorHtml + '</td>' +
+        '<td>' + formatearMoneda(o.valor_total || 0) + '</td>' +
+        '<td>' + horaStr + '</td>' +
+        '<td><span class="badge ' + badgeClass + '">' + (o.estado || '—') + '</span></td>' +
+        '<td><button class="btn-accion" onclick="verOrden(\'' + o.id_op + '\')">' +
+        '<span class="material-icons">visibility</span> Ver</button></td>' +
+        '</tr>';
+
+      // Card mobile
+      var receptorCard = o.nombre_receptor ? '<div class="linea-card"><span class="etiqueta">Recibe</span><strong>' + o.nombre_receptor + '</strong></div>' : '';
+      var limiteCard = '';
+      if (o.estado === 'Prestado' && o.fecha_limite_devolucion) {
+        limiteCard = '<div class="linea-card"><span class="etiqueta">Límite</span><span class="texto-rojo">' + String(o.fecha_limite_devolucion).substring(0, 10) + '</span></div>';
+      }
+
+      htmlCards += '<div class="card-orden-mobile">' +
+        '<div class="card-orden-mobile-header">' +
+          '<strong>' + (o.numero_op || '—') + '</strong>' +
+          '<span class="badge ' + badgeClass + '">' + (o.estado || '—') + '</span>' +
+        '</div>' +
+        '<div class="card-orden-mobile-body">' +
+          '<div class="linea-card"><span class="etiqueta">Fecha</span><span>' + fechaCorta + '</span></div>' +
+          '<div class="linea-card"><span class="etiqueta">Cliente</span><span>' + (o.nombre_cliente || '—') + '</span></div>' +
+          '<div class="linea-card"><span class="etiqueta">Vendedor</span><span>' + (o.nombre_vendedor || '—') + '</span></div>' +
+          '<div class="linea-card"><span class="etiqueta">Valor</span><strong>' + formatearMoneda(o.valor_total || 0) + '</strong></div>' +
+          receptorCard +
+          limiteCard +
+        '</div>' +
+        '<div class="card-orden-mobile-footer">' +
+          '<button class="btn-accion" onclick="verOrden(\'' + o.id_op + '\')">' +
+          '<span class="material-icons">visibility</span> Ver</button>' +
+        '</div>' +
+      '</div>';
+    }
+
+    tbody.innerHTML = html;
+    // Renderizar cards mobile
+    var cardsMobile = document.getElementById('cards-ordenes-mobile');
+    if (cardsMobile) cardsMobile.innerHTML = htmlCards;
+    console.log('[renderizarOrdenes] Tabla renderizada con ' + ordenes.length + ' filas');
+
+  } catch (e) {
+    console.error('[renderizarOrdenes] Error al renderizar:', e);
+    tbody.innerHTML = '<tr><td colspan="8" class="sin-datos">Error al mostrar órdenes: ' + e.message + '</td></tr>';
+  }
+}
+
+function obtenerClaseBadge(estado) {
+  var clases = {
+    'Pendiente': 'badge-pendiente',
+    'Prestado': 'badge-prestado',
+    'Por Cobrar/Devolver': 'badge-porcobrar',
+    'Facturado': 'badge-facturado',
+    'Regresado': 'badge-regresado'
+  };
+  return clases[estado] || '';
+}
+
+function formatearNumero(num) {
+  return Number(num).toLocaleString('es-CO');
+}
+
+// Formatear como moneda colombiana (COP sin decimales)
+function formatearMoneda(valor) {
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(valor);
+}
+
+// ==================== VER / GESTIONAR ORDEN ====================
+function verOrden(idOp) {
+  // Buscar orden en cache
+  var orden = null;
+  for (var i = 0; i < ordenesCache.length; i++) {
+    if (ordenesCache[i].id_op == idOp) {
+      orden = ordenesCache[i];
+      break;
+    }
+  }
+
+  if (!orden) return;
+  ordenSeleccionada = orden;
+
+  // Llenar datos de la página de ver/gestionar
+  var numOp = orden.numero_op || '—';
+  document.getElementById('ver-breadcrumb-op').textContent = numOp;
+  document.getElementById('ver-numero-op').textContent = numOp;
+  document.getElementById('ver-fecha').textContent = orden.fecha || '—';
+  document.getElementById('ver-fecha-prestamo').textContent = orden.fecha_prestamo || '—';
+  document.getElementById('ver-fecha-limite').textContent = orden.fecha_limite_devolucion || '—';
+  document.getElementById('ver-cliente').textContent = orden.nombre_cliente || '—';
+  document.getElementById('ver-vendedor').textContent = orden.nombre_vendedor || '—';
+  document.getElementById('ver-local').textContent = orden.local_origen || '—';
+  document.getElementById('ver-receptor').textContent = orden.nombre_receptor || '—';
+  document.getElementById('ver-observaciones').textContent = orden.observaciones || 'Sin observaciones';
+
+  // Resetear campo de receptor para transición
+  document.getElementById('ver-nombre-receptor').value = '';
+  document.getElementById('campo-receptor-prestado').style.display = 'none';
+  document.getElementById('ver-observaciones-cambio').value = '';
+
+  // Badge de estado
+  var badgeEstado = document.getElementById('ver-estado-badge');
+  badgeEstado.textContent = orden.estado;
+  badgeEstado.className = 'badge ' + obtenerClaseBadge(orden.estado);
+
+  // Cargar detalle de productos
+  google.script.run
+    .withSuccessHandler(function(detalle) {
+      renderizarDetalleOrden(detalle);
+    })
+    .obtenerDetalleOrden(idOp);
+
+  // Generar botones de transición según estado
+  generarBotonesTransicion(orden.estado, idOp);
+
+  // Navegar a la página de ver/gestionar (reemplaza apertura de modal)
+  mostrarModulo('ver-orden');
+}
+
+function renderizarDetalleOrden(detalle) {
+  // Guardar detalle para uso en impresión
+  detalleOrdenActual = detalle || [];
+  var tbody = document.getElementById('tbody-detalle-orden');
+  var totalOrden = 0;
+
+  if (detalle.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="sin-datos">Sin productos</td></tr>';
+    return;
+  }
+
+  var html = '';
+  for (var i = 0; i < detalle.length; i++) {
+    var d = detalle[i];
+    totalOrden += d.valor_total || 0;
+    var badgeItem = obtenerClaseBadge(d.estado_item);
+
+    html += '<tr>' +
+      '<td>' + (d.id_producto || '—') + '</td>' +
+      '<td>' + d.descripcion_libre + '</td>' +
+      '<td>' + d.cantidad + '</td>' +
+      '<td>$' + formatearNumero(d.valor_unitario) + '</td>' +
+      '<td>$' + formatearNumero(d.valor_total) + '</td>' +
+      '<td><span class="badge ' + badgeItem + '">' + d.estado_item + '</span></td>' +
+      '</tr>';
+  }
+
+  tbody.innerHTML = html;
+  document.getElementById('ver-total-orden').innerHTML = '<strong>$' + formatearNumero(totalOrden) + '</strong>';
+}
+
+function generarBotonesTransicion(estadoActual, idOp) {
+  var container = document.getElementById('botones-transicion');
+  var campoReceptor = document.getElementById('campo-receptor-prestado');
+  var html = '';
+
+  if (estadoActual === 'Pendiente') {
+    // Mostrar campo obligatorio de receptor antes del botón
+    campoReceptor.style.display = 'block';
+    html = '<button class="btn-estado btn-estado-prestado" onclick="cambiarEstado(\'' + idOp + '\', \'Prestado\')">Marcar como Prestado</button>';
+  } else if (estadoActual === 'Prestado' || estadoActual === 'Por Cobrar/Devolver') {
+    campoReceptor.style.display = 'none';
+    html = '<button class="btn-estado btn-estado-facturado" onclick="cambiarEstado(\'' + idOp + '\', \'Facturado\')">Marcar como Facturado</button>' +
+           '<button class="btn-estado btn-estado-regresado" onclick="cambiarEstado(\'' + idOp + '\', \'Regresado\')">Marcar como Regresado</button>';
+  } else if (estadoActual === 'Facturado') {
+    campoReceptor.style.display = 'none';
+    html = '<button class="btn-estado btn-estado-regresado" onclick="cambiarEstado(\'' + idOp + '\', \'Regresado\')">Marcar como Regresado</button>';
+  } else if (estadoActual === 'Regresado') {
+    campoReceptor.style.display = 'none';
+    html = '<p style="color:#999; font-size:13px;">Orden cerrada — no hay más transiciones disponibles.</p>';
+  }
+
+  container.innerHTML = html;
+}
+
+function cambiarEstado(idOp, nuevoEstado) {
+  var observaciones = document.getElementById('ver-observaciones-cambio').value.trim();
+  var nombreReceptor = '';
+
+  // Si se marca como Prestado, validar que se ingrese el nombre del receptor
+  if (nuevoEstado === 'Prestado') {
+    nombreReceptor = document.getElementById('ver-nombre-receptor').value.trim();
+    if (!nombreReceptor) {
+      alert('Debe ingresar el nombre de quien recibe el equipo');
+      document.getElementById('ver-nombre-receptor').focus();
+      return;
+    }
+  }
+
+  if (!confirm('¿Cambiar estado a "' + nuevoEstado + '"?')) return;
+
+  google.script.run
+    .withSuccessHandler(function(resultado) {
+      if (resultado.success) {
+        mostrarNotificacion('Estado actualizado a: ' + nuevoEstado, 'exito');
+        cargarOrdenes();
+        cargarContadores();
+        regresarAOrdenes();
+      } else {
+        alert('Error: ' + resultado.mensaje);
+      }
+    })
+    .withFailureHandler(function(error) {
+      alert('Error: ' + error.message);
+    })
+    .actualizarEstadoOrden(idOp, nuevoEstado, observaciones, nombreReceptor);
+}
+
+// ==================== NUEVA ORDEN — PÁGINA COMPLETA ====================
+
+// Navegar a la página de nueva orden (reemplaza el modal)
+function mostrarPaginaNuevaOrden() {
+  // Limpiar estado del formulario
+  itemsNuevaOrden = [];
+  document.getElementById('nueva-orden-cliente').value = '';
+  document.getElementById('nueva-orden-id-cliente').value = '';
+  document.getElementById('nueva-orden-local').value = '';
+  document.getElementById('nueva-orden-receptor').value = '';
+  document.getElementById('nueva-orden-observaciones').value = '';
+  document.getElementById('item-descripcion').value = '';
+  document.getElementById('item-cantidad').value = '1';
+  document.getElementById('item-valor').value = '';
+  renderizarItemsNuevaOrden();
+
+  // Inicializar campo de fecha editable con la fecha de hoy (formato yyyy-MM-dd)
+  var hoy = new Date();
+  var anio = hoy.getFullYear();
+  var mes = ('0' + (hoy.getMonth() + 1)).slice(-2);
+  var dia = ('0' + hoy.getDate()).slice(-2);
+  document.getElementById('nueva-orden-fecha').value = anio + '-' + mes + '-' + dia;
+
+  // Resetear formulario inline de nuevo cliente
+  document.getElementById('form-nuevo-cliente-inline').style.display = 'none';
+  document.getElementById('btn-toggle-nuevo-cliente').style.display = 'inline-flex';
+  limpiarFormClienteInline();
+
+  // Resetear buscador de productos y formulario inline de producto
+  itemProductoSeleccionado = '';
+  document.getElementById('item-buscar-producto').value = '';
+  document.getElementById('dropdown-productos').style.display = 'none';
+  document.getElementById('form-nuevo-producto-inline').style.display = 'none';
+  document.getElementById('btn-toggle-nuevo-producto-inline').style.display = 'inline-flex';
+  limpiarFormProductoInline();
+
+  // Cargar lista de clientes para autocomplete
+  cargarClientesAutocomplete();
+
+  // Verificar disponibilidad de consecutivos y alertar si quedan pocos
+  google.script.run
+    .withSuccessHandler(function(info) {
+      if (info.disponibles <= 0) {
+        mostrarNotificacion('Sin consecutivos disponibles. Contacte al administrador.', 'error');
+      } else if (info.disponibles <= 20) {
+        mostrarNotificacion('Atención: Quedan solo ' + info.disponibles + ' consecutivos disponibles.', 'advertencia');
+      }
+    })
+    .obtenerInfoConsecutivo();
+
+  // Navegar a la página de nueva orden
+  mostrarModulo('nueva-orden');
+}
+
+// Alias para compatibilidad con código existente
+function abrirModalNuevaOrden() {
+  mostrarPaginaNuevaOrden();
+}
+
+// Regresar al listado de órdenes desde cualquier subpágina
+function regresarAOrdenes() {
+  mostrarModulo('ordenes');
+}
+
+// Cancelar creación de nueva orden (pide confirmación si hay datos)
+function cancelarNuevaOrden() {
+  var tieneCliente = document.getElementById('nueva-orden-cliente').value.trim();
+  var tieneItems = itemsNuevaOrden.length > 0;
+  var tieneObs = document.getElementById('nueva-orden-observaciones').value.trim();
+
+  if (tieneCliente || tieneItems || tieneObs) {
+    if (!confirm('¿Desea salir sin guardar? Se perderán los datos ingresados.')) return;
+  }
+  regresarAOrdenes();
+}
+
+function cargarClientesAutocomplete() {
+  var datalist = document.getElementById('lista-clientes');
+  datalist.innerHTML = '';
+  for (var i = 0; i < clientesCache.length; i++) {
+    var option = document.createElement('option');
+    option.value = clientesCache[i].nombre_local;
+    option.dataset.id = clientesCache[i].id_cliente;
+    datalist.appendChild(option);
+  }
+}
+
+function buscarClienteAutocomplete() {
+  var input = document.getElementById('nueva-orden-cliente').value;
+  var hiddenInput = document.getElementById('nueva-orden-id-cliente');
+
+  for (var i = 0; i < clientesCache.length; i++) {
+    if (clientesCache[i].nombre_local === input) {
+      hiddenInput.value = clientesCache[i].id_cliente;
+      return;
+    }
+  }
+  hiddenInput.value = '';
+}
+
+function agregarItem() {
+  var desc = document.getElementById('item-descripcion').value.trim();
+  var cant = parseInt(document.getElementById('item-cantidad').value) || 0;
+  var valor = parseFloat(document.getElementById('item-valor').value) || 0;
+
+  if (!desc) {
+    alert('Ingrese la descripción del producto');
+    return;
+  }
+  if (cant <= 0) {
+    alert('La cantidad debe ser mayor a 0');
+    return;
+  }
+
+  itemsNuevaOrden.push({
+    id_producto: itemProductoSeleccionado || '', // FK a Productos o vacío si texto libre
+    descripcion_libre: desc,
+    cantidad: cant,
+    valor_unitario: valor,
+    valor_total: cant * valor
+  });
+
+  // Limpiar campos y resetear producto seleccionado
+  document.getElementById('item-descripcion').value = '';
+  document.getElementById('item-cantidad').value = '1';
+  document.getElementById('item-valor').value = '';
+  document.getElementById('item-buscar-producto').value = '';
+  itemProductoSeleccionado = '';
+  document.getElementById('item-descripcion').focus();
+
+  renderizarItemsNuevaOrden();
+}
+
+function eliminarItem(index) {
+  itemsNuevaOrden.splice(index, 1);
+  renderizarItemsNuevaOrden();
+}
+
+function renderizarItemsNuevaOrden() {
+  var tbody = document.getElementById('tbody-items');
+  var total = 0;
+
+  if (itemsNuevaOrden.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="sin-datos">Agregue productos a la orden</td></tr>';
+    document.getElementById('total-items').innerHTML = '<strong>$0</strong>';
+    return;
+  }
+
+  var html = '';
+  for (var i = 0; i < itemsNuevaOrden.length; i++) {
+    var item = itemsNuevaOrden[i];
+    total += item.valor_total;
+
+    html += '<tr>' +
+      '<td style="color:#888; font-size:12px;">' + (i + 1) + '</td>' +
+      '<td>' + item.descripcion_libre + '</td>' +
+      '<td>' + item.cantidad + '</td>' +
+      '<td>' + formatearMoneda(item.valor_unitario) + '</td>' +
+      '<td><strong>' + formatearMoneda(item.valor_total) + '</strong></td>' +
+      '<td><button class="btn-eliminar-item" onclick="eliminarItem(' + i + ')" title="Eliminar ítem">' +
+      '<span class="material-icons">delete</span></button></td>' +
+      '</tr>';
+  }
+
+  tbody.innerHTML = html;
+  document.getElementById('total-items').innerHTML = '<strong>' + formatearMoneda(total) + '</strong>';
+}
+
+function guardarNuevaOrden() {
+  var idCliente = document.getElementById('nueva-orden-id-cliente').value;
+  var local = document.getElementById('nueva-orden-local').value.trim();
+  var obs = document.getElementById('nueva-orden-observaciones').value.trim();
+
+  if (!idCliente) {
+    alert('Seleccione un cliente de la lista');
+    return;
+  }
+  if (itemsNuevaOrden.length === 0) {
+    alert('Agregue al menos un producto a la orden');
+    return;
+  }
+
+  var receptor = document.getElementById('nueva-orden-receptor').value.trim();
+
+  var fechaOrden = document.getElementById('nueva-orden-fecha').value;
+  if (!fechaOrden) {
+    alert('Seleccione una fecha para la orden');
+    return;
+  }
+
+  var datosOrden = {
+    id_cliente: parseInt(idCliente),
+    id_vendedor: usuarioActual.id_usuario,
+    local_origen: local,
+    observaciones: obs,
+    nombre_receptor: receptor,
+    fecha: fechaOrden
+  };
+
+  google.script.run
+    .withSuccessHandler(function(resultado) {
+      if (resultado.success) {
+        mostrarNotificacion('Orden creada: ' + resultado.numero_op, 'exito');
+        cargarOrdenes();
+        cargarContadores();
+        regresarAOrdenes();
+      } else {
+        // Mostrar el error específico (ej: rango de consecutivos agotado)
+        var msg = resultado.error || 'Error al crear la orden.';
+        // Quitar prefijo técnico antes de mostrar al usuario
+        msg = msg.replace('RANGO_AGOTADO: ', '');
+        alert(msg);
+      }
+    })
+    .withFailureHandler(function(error) {
+      alert('Error: ' + error.message);
+    })
+    .crearOrden(datosOrden, itemsNuevaOrden);
+}
+
+// ==================== CREAR CLIENTE INLINE (en modal Nueva Orden) ====================
+
+// Mostrar u ocultar el mini-formulario inline de nuevo cliente
+function toggleFormNuevoClienteInline() {
+  var form = document.getElementById('form-nuevo-cliente-inline');
+  var enlace = document.getElementById('btn-toggle-nuevo-cliente');
+  var visible = form.style.display !== 'none';
+
+  if (visible) {
+    // Ocultar formulario y limpiar campos
+    form.style.display = 'none';
+    enlace.style.display = 'inline-flex';
+    limpiarFormClienteInline();
+  } else {
+    // Mostrar formulario y ocultar enlace
+    form.style.display = 'block';
+    enlace.style.display = 'none';
+    document.getElementById('inline-cliente-nombre').focus();
+  }
+}
+
+// Limpiar campos del formulario inline
+function limpiarFormClienteInline() {
+  document.getElementById('inline-cliente-nombre').value = '';
+  document.getElementById('inline-cliente-contacto').value = '';
+  document.getElementById('inline-cliente-telefono').value = '';
+  document.getElementById('inline-cliente-ciudad').value = 'Cali';
+  var msg = document.getElementById('inline-cliente-mensaje');
+  msg.style.display = 'none';
+  msg.className = 'inline-cliente-mensaje';
+}
+
+// Guardar cliente desde el formulario inline y seleccionarlo en la orden
+function guardarClienteInline() {
+  var nombre = document.getElementById('inline-cliente-nombre').value.trim();
+  var msgDiv = document.getElementById('inline-cliente-mensaje');
+
+  if (!nombre) {
+    msgDiv.textContent = 'El nombre del local es obligatorio';
+    msgDiv.className = 'inline-cliente-mensaje error';
+    msgDiv.style.display = 'block';
+    return;
+  }
+
+  var datos = {
+    nombre_local: nombre,
+    contacto: document.getElementById('inline-cliente-contacto').value.trim(),
+    telefono: document.getElementById('inline-cliente-telefono').value.trim(),
+    ciudad: document.getElementById('inline-cliente-ciudad').value.trim()
+  };
+
+  // Deshabilitar botón mientras se guarda
+  var btnGuardar = document.querySelector('.btn-guardar-cliente-inline');
+  btnGuardar.disabled = true;
+  btnGuardar.innerHTML = '<span class="material-icons" style="font-size:16px; vertical-align:middle;">hourglass_empty</span> Guardando...';
+
+  google.script.run
+    .withSuccessHandler(function(resultado) {
+      if (resultado.success) {
+        // Agregar el nuevo cliente al cache local
+        var nuevoCliente = {
+          id_cliente: resultado.id_cliente,
+          nombre_local: datos.nombre_local,
+          contacto: datos.contacto,
+          telefono: datos.telefono,
+          ciudad: datos.ciudad
+        };
+        clientesCache.push(nuevoCliente);
+
+        // Seleccionar automáticamente el cliente nuevo en el campo de la orden
+        document.getElementById('nueva-orden-cliente').value = datos.nombre_local;
+        document.getElementById('nueva-orden-id-cliente').value = resultado.id_cliente;
+
+        // Actualizar datalist con el nuevo cliente
+        cargarClientesAutocomplete();
+
+        // Mostrar mensaje de éxito brevemente
+        msgDiv.textContent = 'Cliente "' + datos.nombre_local + '" creado y seleccionado';
+        msgDiv.className = 'inline-cliente-mensaje exito';
+        msgDiv.style.display = 'block';
+
+        // Colapsar el formulario después de 1.5 segundos
+        setTimeout(function() {
+          var form = document.getElementById('form-nuevo-cliente-inline');
+          var enlace = document.getElementById('btn-toggle-nuevo-cliente');
+          form.style.display = 'none';
+          enlace.style.display = 'inline-flex';
+          limpiarFormClienteInline();
+        }, 1500);
+      } else {
+        msgDiv.textContent = 'Error al crear el cliente';
+        msgDiv.className = 'inline-cliente-mensaje error';
+        msgDiv.style.display = 'block';
+      }
+
+      // Rehabilitar botón
+      btnGuardar.disabled = false;
+      btnGuardar.innerHTML = '<span class="material-icons" style="font-size:16px; vertical-align:middle;">save</span> Guardar cliente';
+    })
+    .withFailureHandler(function(error) {
+      msgDiv.textContent = 'Error: ' + error.message;
+      msgDiv.className = 'inline-cliente-mensaje error';
+      msgDiv.style.display = 'block';
+
+      // Rehabilitar botón
+      btnGuardar.disabled = false;
+      btnGuardar.innerHTML = '<span class="material-icons" style="font-size:16px; vertical-align:middle;">save</span> Guardar cliente';
+    })
+    .crearCliente(datos);
+}
+
+// ==================== CLIENTES ====================
+function cargarClientes() {
+  google.script.run
+    .withSuccessHandler(function(clientes) {
+      clientesCache = clientes;
+      renderizarClientes(clientes);
+    })
+    .obtenerClientes();
+}
+
+function renderizarClientes(clientes) {
+  var tbody = document.getElementById('tbody-clientes');
+  var esAdmin = usuarioActual && usuarioActual.rol === 'Super admin';
+  var colspan = esAdmin ? 6 : 5;
+
+  if (clientes.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="' + colspan + '" class="sin-datos">No hay clientes registrados</td></tr>';
+    return;
+  }
+
+  var html = '';
+  for (var i = 0; i < clientes.length; i++) {
+    var c = clientes[i];
+    html += '<tr>' +
+      '<td>' + c.id_cliente + '</td>' +
+      '<td>' + c.nombre_local + '</td>' +
+      '<td>' + (c.contacto || '') + '</td>' +
+      '<td>' + (c.telefono || '') + '</td>' +
+      '<td>' + (c.ciudad || '') + '</td>';
+    if (esAdmin) {
+      html += '<td class="col-acciones-admin">' +
+        '<div class="btns-accion-grupo">' +
+        '<button class="btn-accion-icon btn-accion-editar" title="Editar" onclick="abrirModalEditarCliente(\'' + c.id_cliente + '\')">' +
+        '<span class="material-icons">edit</span></button>' +
+        '<button class="btn-accion-icon btn-accion-eliminar" title="Eliminar" onclick="confirmarEliminarCliente(\'' + c.id_cliente + '\', \'' + escapeHtml(c.nombre_local) + '\')">' +
+        '<span class="material-icons">delete</span></button>' +
+        '</div></td>';
+    }
+    html += '</tr>';
+  }
+
+  tbody.innerHTML = html;
+}
+
+function buscarClientes() {
+  var termino = document.getElementById('buscar-cliente').value.toLowerCase();
+  var filtrados = clientesCache.filter(function(c) {
+    return c.nombre_local.toLowerCase().indexOf(termino) !== -1 ||
+           (c.contacto && c.contacto.toLowerCase().indexOf(termino) !== -1) ||
+           (c.ciudad && c.ciudad.toLowerCase().indexOf(termino) !== -1);
+  });
+  renderizarClientes(filtrados);
+}
+
+function abrirModalNuevoCliente() {
+  document.getElementById('cliente-nombre').value = '';
+  document.getElementById('cliente-contacto').value = '';
+  document.getElementById('cliente-telefono').value = '';
+  document.getElementById('cliente-ciudad').value = 'Cali';
+  document.getElementById('modal-nuevo-cliente').style.display = 'flex';
+}
+
+function guardarNuevoCliente() {
+  var nombre = document.getElementById('cliente-nombre').value.trim();
+  if (!nombre) {
+    alert('El nombre del local es obligatorio');
+    return;
+  }
+
+  var datos = {
+    nombre_local: nombre,
+    contacto: document.getElementById('cliente-contacto').value.trim(),
+    telefono: document.getElementById('cliente-telefono').value.trim(),
+    ciudad: document.getElementById('cliente-ciudad').value.trim()
+  };
+
+  google.script.run
+    .withSuccessHandler(function(resultado) {
+      if (resultado.success) {
+        alert('Cliente creado exitosamente');
+        cerrarModal('modal-nuevo-cliente');
+        cargarClientes();
+      }
+    })
+    .withFailureHandler(function(error) {
+      alert('Error: ' + error.message);
+    })
+    .crearCliente(datos);
+}
+
+// ==================== EDITAR / ELIMINAR CLIENTES ====================
+
+// Abrir modal de edición con datos precargados del cliente
+function abrirModalEditarCliente(id) {
+  var cliente = clientesCache.find(function(c) { return String(c.id_cliente) === String(id); });
+  if (!cliente) { mostrarNotificacion('Cliente no encontrado', 'error'); return; }
+
+  document.getElementById('edit-cliente-id').value = cliente.id_cliente;
+  document.getElementById('edit-cliente-nombre').value = cliente.nombre_local || '';
+  document.getElementById('edit-cliente-contacto').value = cliente.contacto || '';
+  document.getElementById('edit-cliente-telefono').value = cliente.telefono || '';
+  document.getElementById('edit-cliente-ciudad').value = cliente.ciudad || '';
+  document.getElementById('modal-editar-cliente').style.display = 'flex';
+}
+
+// Guardar cambios del cliente editado
+function guardarEdicionCliente() {
+  var id = document.getElementById('edit-cliente-id').value;
+  var nombre = document.getElementById('edit-cliente-nombre').value.trim();
+  var telefono = document.getElementById('edit-cliente-telefono').value.trim();
+
+  if (!nombre) { mostrarNotificacion('El nombre del local es obligatorio', 'error'); return; }
+  if (!telefono) { mostrarNotificacion('El teléfono es obligatorio', 'error'); return; }
+
+  var datos = {
+    nombre_local: nombre,
+    contacto: document.getElementById('edit-cliente-contacto').value.trim(),
+    telefono: telefono,
+    ciudad: document.getElementById('edit-cliente-ciudad').value.trim()
+  };
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.success) {
+        mostrarNotificacion('Cliente actualizado correctamente', 'exito');
+        cerrarModal('modal-editar-cliente');
+        cargarClientes();
+      } else {
+        mostrarNotificacion(res.mensaje || 'Error al actualizar', 'error');
+      }
+    })
+    .withFailureHandler(function(e) { mostrarNotificacion('Error: ' + e.message, 'error'); })
+    .editarCliente(id, datos);
+}
+
+// Confirmar y eliminar cliente
+function confirmarEliminarCliente(id, nombre) {
+  var ok = window.confirm('¿Está seguro de eliminar el cliente "' + nombre + '"?\nEsta acción no se puede deshacer.');
+  if (!ok) return;
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.success) {
+        mostrarNotificacion('Cliente eliminado correctamente', 'exito');
+        cargarClientes();
+      } else {
+        mostrarNotificacion(res.mensaje || 'Error al eliminar', 'error');
+      }
+    })
+    .withFailureHandler(function(e) { mostrarNotificacion('Error: ' + e.message, 'error'); })
+    .eliminarCliente(id);
+}
+
+// ==================== USUARIOS ====================
+function cargarUsuarios() {
+  google.script.run
+    .withSuccessHandler(function(usuarios) {
+      var tbody = document.getElementById('tbody-usuarios');
+      var esAdmin = usuarioActual && usuarioActual.rol === 'Super admin';
+
+      if (usuarios.length === 0) {
+        var colspan = esAdmin ? 7 : 6;
+        tbody.innerHTML = '<tr><td colspan="' + colspan + '" class="sin-datos">No hay usuarios</td></tr>';
+        return;
+      }
+
+      var html = '';
+      for (var i = 0; i < usuarios.length; i++) {
+        var u = usuarios[i];
+        var esActivo = u.activo === 'Sí';
+        html += '<tr>' +
+          '<td>' + u.id_usuario + '</td>' +
+          '<td>' + u.nombre + '</td>' +
+          '<td>' + u.email + '</td>' +
+          '<td>' + u.rol + '</td>' +
+          '<td>' + (u.local_asignado || '') + '</td>' +
+          '<td><span class="badge ' + (esActivo ? 'badge-prestado' : 'badge-regresado') + '">' + u.activo + '</span></td>';
+        if (esAdmin) {
+          // No permitir acciones sobre sí mismo para toggle
+          var esMismo = String(u.id_usuario) === String(usuarioActual.id_usuario);
+          var btnToggle = '';
+          if (esMismo) {
+            btnToggle = '<button class="btn-accion-icon btn-accion-toggle-disabled" title="No puedes desactivarte" disabled>' +
+              '<span class="material-icons">block</span></button>';
+          } else if (esActivo) {
+            btnToggle = '<button class="btn-accion-icon btn-accion-eliminar" title="Desactivar" onclick="toggleEstadoUsuario(\'' + u.id_usuario + '\', \'' + escapeHtml(u.nombre) + '\')">' +
+              '<span class="material-icons">person_off</span></button>';
+          } else {
+            btnToggle = '<button class="btn-accion-icon btn-accion-activar" title="Activar" onclick="toggleEstadoUsuario(\'' + u.id_usuario + '\', \'' + escapeHtml(u.nombre) + '\')">' +
+              '<span class="material-icons">person</span></button>';
+          }
+          html += '<td class="col-acciones-admin">' +
+            '<div class="btns-accion-grupo">' +
+            '<button class="btn-accion-icon btn-accion-editar" title="Editar" onclick="abrirModalEditarUsuario(\'' + u.id_usuario + '\')">' +
+            '<span class="material-icons">edit</span></button>' +
+            btnToggle +
+            '</div></td>';
+        }
+        html += '</tr>';
+      }
+
+      tbody.innerHTML = html;
+    })
+    .obtenerUsuarios();
+}
+
+function abrirModalNuevoUsuario() {
+  document.getElementById('usuario-nombre-input').value = '';
+  document.getElementById('usuario-email').value = '';
+  document.getElementById('usuario-password').value = '';
+  document.getElementById('usuario-rol').value = 'Vendedor';
+  document.getElementById('usuario-local').value = '';
+  document.getElementById('modal-nuevo-usuario').style.display = 'flex';
+}
+
+function guardarNuevoUsuario() {
+  var nombre = document.getElementById('usuario-nombre-input').value.trim();
+  var email = document.getElementById('usuario-email').value.trim();
+  var password = document.getElementById('usuario-password').value;
+
+  if (!nombre || !email || !password) {
+    alert('Nombre, email y contraseña son obligatorios');
+    return;
+  }
+
+  var datos = {
+    nombre: nombre,
+    email: email,
+    password: password,
+    rol: document.getElementById('usuario-rol').value,
+    local_asignado: document.getElementById('usuario-local').value.trim()
+  };
+
+  google.script.run
+    .withSuccessHandler(function(resultado) {
+      if (resultado.success) {
+        alert('Usuario creado exitosamente');
+        cerrarModal('modal-nuevo-usuario');
+        cargarUsuarios();
+      }
+    })
+    .withFailureHandler(function(error) {
+      alert('Error: ' + error.message);
+    })
+    .crearUsuario(datos);
+}
+
+// ==================== EDITAR / DESACTIVAR USUARIOS ====================
+
+// Abrir modal de edición con datos precargados del usuario
+function abrirModalEditarUsuario(id) {
+  // Buscar en la tabla actual (los datos vienen del servidor, no hay cache global)
+  google.script.run
+    .withSuccessHandler(function(usuarios) {
+      var usuario = usuarios.find(function(u) { return String(u.id_usuario) === String(id); });
+      if (!usuario) { mostrarNotificacion('Usuario no encontrado', 'error'); return; }
+
+      document.getElementById('edit-usuario-id').value = usuario.id_usuario;
+      document.getElementById('edit-usuario-nombre').value = usuario.nombre || '';
+      document.getElementById('edit-usuario-email').value = usuario.email || '';
+      document.getElementById('edit-usuario-rol').value = usuario.rol || 'Vendedor';
+      document.getElementById('edit-usuario-local').value = usuario.local_asignado || '';
+      document.getElementById('edit-usuario-password').value = '';
+      document.getElementById('modal-editar-usuario').style.display = 'flex';
+    })
+    .obtenerUsuarios();
+}
+
+// Guardar cambios del usuario editado
+function guardarEdicionUsuario() {
+  var id = document.getElementById('edit-usuario-id').value;
+  var nombre = document.getElementById('edit-usuario-nombre').value.trim();
+  var email = document.getElementById('edit-usuario-email').value.trim();
+  var rol = document.getElementById('edit-usuario-rol').value;
+
+  if (!nombre) { mostrarNotificacion('El nombre es obligatorio', 'error'); return; }
+  if (!email || email.indexOf('@') === -1) { mostrarNotificacion('Ingrese un email válido', 'error'); return; }
+  if (!rol) { mostrarNotificacion('Seleccione un rol', 'error'); return; }
+
+  var datos = {
+    nombre: nombre,
+    email: email,
+    rol: rol,
+    local_asignado: document.getElementById('edit-usuario-local').value.trim(),
+    password: document.getElementById('edit-usuario-password').value
+  };
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.success) {
+        mostrarNotificacion('Usuario actualizado correctamente', 'exito');
+        cerrarModal('modal-editar-usuario');
+        cargarUsuarios();
+      } else {
+        mostrarNotificacion(res.mensaje || 'Error al actualizar', 'error');
+      }
+    })
+    .withFailureHandler(function(e) { mostrarNotificacion('Error: ' + e.message, 'error'); })
+    .editarUsuario(id, datos);
+}
+
+// Activar o desactivar un usuario con confirmación
+function toggleEstadoUsuario(id, nombre) {
+  var ok = window.confirm('¿Está seguro de cambiar el estado del usuario "' + nombre + '"?');
+  if (!ok) return;
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.success) {
+        var msg = res.activo === 'Sí' ? 'Usuario activado' : 'Usuario desactivado';
+        mostrarNotificacion(msg + ' correctamente', 'exito');
+        cargarUsuarios();
+      } else {
+        mostrarNotificacion(res.mensaje || 'Error al cambiar estado', 'error');
+      }
+    })
+    .withFailureHandler(function(e) { mostrarNotificacion('Error: ' + e.message, 'error'); })
+    .toggleUsuario(id);
+}
+
+// ==================== PRODUCTOS — TAB GESTIÓN ====================
+
+// Cargar cache de productos activos (para autocomplete en órdenes)
+function cargarProductosCache() {
+  google.script.run
+    .withSuccessHandler(function(productos) {
+      productosCache = productos || [];
+    })
+    .obtenerProductos();
+}
+
+// Cargar todos los productos (activos e inactivos) para la tabla de gestión
+function cargarProductos() {
+  google.script.run
+    .withSuccessHandler(function(productos) {
+      renderizarProductos(productos);
+    })
+    .withFailureHandler(function(error) {
+      document.getElementById('tbody-productos').innerHTML =
+        '<tr><td colspan="6" class="sin-datos">Error: ' + error.message + '</td></tr>';
+    })
+    .listarProductos();
+}
+
+function renderizarProductos(productos) {
+  var tbody = document.getElementById('tbody-productos');
+  if (!productos || productos.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="sin-datos">No hay productos registrados</td></tr>';
+    return;
+  }
+
+  var html = '';
+  for (var i = 0; i < productos.length; i++) {
+    var p = productos[i];
+    var activoBadge = p.activo === 'Sí'
+      ? '<span class="badge badge-prestado">Sí</span>'
+      : '<span class="badge badge-regresado">No</span>';
+
+    html += '<tr' + (p.activo !== 'Sí' ? ' style="opacity:0.5;"' : '') + '>' +
+      '<td><strong>' + (p.nombre || '—') + '</strong></td>' +
+      '<td>' + (p.categoria || '—') + '</td>' +
+      '<td>' + (p.descripcion || '—') + '</td>' +
+      '<td>' + formatearMoneda(p.precio_ref || 0) + '</td>' +
+      '<td>' + activoBadge + '</td>' +
+      '<td>' +
+        '<button class="btn-accion" onclick="abrirModalEditarProducto(' + p.id_producto + ')" style="margin-right:4px;">' +
+          '<span class="material-icons">edit</span> Editar</button>';
+
+    if (p.activo === 'Sí') {
+      html += '<button class="btn-accion" onclick="confirmarDesactivarProducto(' + p.id_producto + ', \'' + (p.nombre || '').replace(/'/g, "\\'") + '\')" style="background:#f5f5f5; color:#f44336;">' +
+          '<span class="material-icons">block</span> Desactivar</button>';
+    }
+
+    html += '</td></tr>';
+  }
+  tbody.innerHTML = html;
+}
+
+function buscarProductos() {
+  google.script.run
+    .withSuccessHandler(function(productos) {
+      var termino = (document.getElementById('buscar-producto').value || '').toLowerCase();
+      if (!termino) {
+        renderizarProductos(productos);
+        return;
+      }
+      var filtrados = productos.filter(function(p) {
+        return (p.nombre || '').toLowerCase().indexOf(termino) !== -1 ||
+               (p.categoria || '').toLowerCase().indexOf(termino) !== -1;
+      });
+      renderizarProductos(filtrados);
+    })
+    .listarProductos();
+}
+
+// Abrir modal para crear nuevo producto
+function abrirModalNuevoProducto() {
+  document.getElementById('modal-producto-titulo').textContent = 'Nuevo Producto';
+  document.getElementById('btn-guardar-producto').textContent = 'Guardar Producto';
+  document.getElementById('producto-id').value = '';
+  document.getElementById('producto-nombre').value = '';
+  document.getElementById('producto-categoria').value = '';
+  document.getElementById('producto-descripcion').value = '';
+  document.getElementById('producto-precio').value = '';
+  document.getElementById('producto-activo').checked = true;
+  document.getElementById('modal-producto').style.display = 'flex';
+}
+
+// Abrir modal para editar producto existente
+function abrirModalEditarProducto(idProducto) {
+  google.script.run
+    .withSuccessHandler(function(productos) {
+      var producto = null;
+      for (var i = 0; i < productos.length; i++) {
+        if (String(productos[i].id_producto) === String(idProducto)) {
+          producto = productos[i];
+          break;
+        }
+      }
+      if (!producto) {
+        alert('Producto no encontrado');
+        return;
+      }
+
+      document.getElementById('modal-producto-titulo').textContent = 'Editar Producto';
+      document.getElementById('btn-guardar-producto').textContent = 'Actualizar Producto';
+      document.getElementById('producto-id').value = producto.id_producto;
+      document.getElementById('producto-nombre').value = producto.nombre || '';
+      document.getElementById('producto-categoria').value = producto.categoria || '';
+      document.getElementById('producto-descripcion').value = producto.descripcion || '';
+      document.getElementById('producto-precio').value = producto.precio_ref || '';
+      document.getElementById('producto-activo').checked = (producto.activo === 'Sí');
+      document.getElementById('modal-producto').style.display = 'flex';
+    })
+    .listarProductos();
+}
+
+// Guardar producto (crear o actualizar)
+function guardarProducto() {
+  var nombre = document.getElementById('producto-nombre').value.trim();
+  if (!nombre) {
+    alert('El nombre del producto es obligatorio');
+    return;
+  }
+
+  var datos = {
+    nombre: nombre,
+    categoria: document.getElementById('producto-categoria').value.trim(),
+    descripcion: document.getElementById('producto-descripcion').value.trim(),
+    precio_ref: parseFloat(document.getElementById('producto-precio').value) || 0,
+    activo: document.getElementById('producto-activo').checked ? 'Sí' : 'No'
+  };
+
+  var idProducto = document.getElementById('producto-id').value;
+
+  if (idProducto) {
+    // Actualizar
+    google.script.run
+      .withSuccessHandler(function(resultado) {
+        if (resultado.success) {
+          alert('Producto actualizado');
+          cerrarModal('modal-producto');
+          cargarProductos();
+          cargarProductosCache();
+        } else {
+          alert('Error: ' + resultado.mensaje);
+        }
+      })
+      .withFailureHandler(function(error) { alert('Error: ' + error.message); })
+      .actualizarProducto(idProducto, datos);
+  } else {
+    // Crear
+    google.script.run
+      .withSuccessHandler(function(resultado) {
+        if (resultado.success) {
+          alert('Producto creado');
+          cerrarModal('modal-producto');
+          cargarProductos();
+          cargarProductosCache();
+        } else {
+          alert('Error al crear el producto');
+        }
+      })
+      .withFailureHandler(function(error) { alert('Error: ' + error.message); })
+      .crearProducto(datos);
+  }
+}
+
+// Confirmar y desactivar producto
+function confirmarDesactivarProducto(idProducto, nombre) {
+  if (!confirm('¿Desactivar el producto "' + nombre + '"? No se eliminará, solo dejará de estar disponible.')) return;
+
+  google.script.run
+    .withSuccessHandler(function(resultado) {
+      if (resultado.success) {
+        alert('Producto desactivado');
+        cargarProductos();
+        cargarProductosCache();
+      } else {
+        alert('Error: ' + resultado.mensaje);
+      }
+    })
+    .withFailureHandler(function(error) { alert('Error: ' + error.message); })
+    .desactivarProducto(idProducto);
+}
+
+// ==================== PRODUCTOS — AUTOCOMPLETE EN NUEVA ORDEN ====================
+
+// Buscar productos mientras el usuario escribe en el campo de ítem
+function buscarProductoAutocomplete() {
+  var input = document.getElementById('item-buscar-producto').value.trim().toLowerCase();
+  var dropdown = document.getElementById('dropdown-productos');
+
+  if (!input || input.length < 1) {
+    dropdown.style.display = 'none';
+    return;
+  }
+
+  var resultados = productosCache.filter(function(p) {
+    return (p.nombre || '').toLowerCase().indexOf(input) !== -1 ||
+           (p.categoria || '').toLowerCase().indexOf(input) !== -1;
+  });
+
+  if (resultados.length === 0) {
+    dropdown.innerHTML = '<div class="dropdown-item-empty">No se encontraron productos</div>';
+    dropdown.style.display = 'block';
+    return;
+  }
+
+  var html = '';
+  for (var i = 0; i < resultados.length; i++) {
+    var p = resultados[i];
+    html += '<div class="dropdown-item" onclick="seleccionarProductoAutocomplete(' + p.id_producto + ')">' +
+      '<strong>' + p.nombre + '</strong>' +
+      '<span style="color:#888; font-size:12px; margin-left:8px;">' + (p.categoria || '') + '</span>' +
+      '<span style="color:#4caf50; font-size:12px; float:right;">' + formatearMoneda(p.precio_ref || 0) + '</span>' +
+    '</div>';
+  }
+  dropdown.innerHTML = html;
+  dropdown.style.display = 'block';
+}
+
+// Al seleccionar un producto del dropdown, pre-llenar los campos de ítem
+// y guardar el id_producto como FK para el Detalle_Pedido
+function seleccionarProductoAutocomplete(idProducto) {
+  var producto = null;
+  for (var i = 0; i < productosCache.length; i++) {
+    if (productosCache[i].id_producto == idProducto) {
+      producto = productosCache[i];
+      break;
+    }
+  }
+
+  if (producto) {
+    document.getElementById('item-descripcion').value = producto.nombre || '';
+    document.getElementById('item-valor').value = producto.precio_ref || '';
+    itemProductoSeleccionado = String(producto.id_producto); // Guardar FK
+  }
+
+  // Limpiar buscador y cerrar dropdown
+  document.getElementById('item-buscar-producto').value = '';
+  document.getElementById('dropdown-productos').style.display = 'none';
+}
+
+// Cerrar dropdown al hacer clic fuera
+document.addEventListener('click', function(e) {
+  var dropdown = document.getElementById('dropdown-productos');
+  var input = document.getElementById('item-buscar-producto');
+  if (dropdown && input && !dropdown.contains(e.target) && e.target !== input) {
+    dropdown.style.display = 'none';
+  }
+});
+
+// ==================== PRODUCTO INLINE — CREAR DESDE MODAL NUEVA ORDEN ====================
+
+function toggleFormNuevoProductoInline() {
+  var form = document.getElementById('form-nuevo-producto-inline');
+  var enlace = document.getElementById('btn-toggle-nuevo-producto-inline');
+  var visible = form.style.display !== 'none';
+
+  if (visible) {
+    form.style.display = 'none';
+    enlace.style.display = 'inline-flex';
+    limpiarFormProductoInline();
+  } else {
+    form.style.display = 'block';
+    enlace.style.display = 'none';
+    document.getElementById('inline-producto-nombre').focus();
+  }
+}
+
+function limpiarFormProductoInline() {
+  document.getElementById('inline-producto-nombre').value = '';
+  document.getElementById('inline-producto-categoria').value = '';
+  document.getElementById('inline-producto-precio').value = '';
+  var msg = document.getElementById('inline-producto-mensaje');
+  msg.style.display = 'none';
+  msg.className = 'inline-cliente-mensaje';
+}
+
+function guardarProductoInline() {
+  var nombre = document.getElementById('inline-producto-nombre').value.trim();
+  var msgDiv = document.getElementById('inline-producto-mensaje');
+
+  if (!nombre) {
+    msgDiv.textContent = 'El nombre del producto es obligatorio';
+    msgDiv.className = 'inline-cliente-mensaje error';
+    msgDiv.style.display = 'block';
+    return;
+  }
+
+  var datos = {
+    nombre: nombre,
+    categoria: document.getElementById('inline-producto-categoria').value.trim(),
+    precio_ref: parseFloat(document.getElementById('inline-producto-precio').value) || 0,
+    activo: 'Sí'
+  };
+
+  var btnGuardar = document.getElementById('btn-guardar-producto-inline');
+  btnGuardar.disabled = true;
+  btnGuardar.innerHTML = '<span class="material-icons" style="font-size:16px; vertical-align:middle;">hourglass_empty</span> Guardando...';
+
+  google.script.run
+    .withSuccessHandler(function(resultado) {
+      if (resultado.success) {
+        // Agregar al cache local de productos activos
+        var nuevoProducto = {
+          id_producto: resultado.id_producto,
+          nombre: datos.nombre,
+          categoria: datos.categoria,
+          precio_ref: datos.precio_ref,
+          activo: 'Sí'
+        };
+        productosCache.push(nuevoProducto);
+
+        // Pre-llenar campos del ítem con el producto creado y guardar FK
+        document.getElementById('item-descripcion').value = datos.nombre;
+        document.getElementById('item-valor').value = datos.precio_ref || '';
+        itemProductoSeleccionado = String(resultado.id_producto);
+
+        // Mensaje de éxito
+        msgDiv.textContent = 'Producto "' + datos.nombre + '" creado y seleccionado';
+        msgDiv.className = 'inline-cliente-mensaje exito';
+        msgDiv.style.display = 'block';
+
+        // Colapsar después de 1.5s
+        setTimeout(function() {
+          var form = document.getElementById('form-nuevo-producto-inline');
+          var enlace = document.getElementById('btn-toggle-nuevo-producto-inline');
+          form.style.display = 'none';
+          enlace.style.display = 'inline-flex';
+          limpiarFormProductoInline();
+        }, 1500);
+      } else {
+        msgDiv.textContent = 'Error al crear el producto';
+        msgDiv.className = 'inline-cliente-mensaje error';
+        msgDiv.style.display = 'block';
+      }
+
+      btnGuardar.disabled = false;
+      btnGuardar.innerHTML = '<span class="material-icons" style="font-size:16px; vertical-align:middle;">save</span> Guardar producto';
+    })
+    .withFailureHandler(function(error) {
+      msgDiv.textContent = 'Error: ' + error.message;
+      msgDiv.className = 'inline-cliente-mensaje error';
+      msgDiv.style.display = 'block';
+
+      btnGuardar.disabled = false;
+      btnGuardar.innerHTML = '<span class="material-icons" style="font-size:16px; vertical-align:middle;">save</span> Guardar producto';
+    })
+    .crearProducto(datos);
+}
+
+// ==================== REPORTES ====================
+
+// Obtener filtros del reporte
+function obtenerFiltrosReporte() {
+  return {
+    fecha_inicio: document.getElementById('filtro-fecha-inicio').value,
+    fecha_fin: document.getElementById('filtro-fecha-fin').value,
+    estado: document.getElementById('filtro-estado-reporte').value,
+    id_vendedor: document.getElementById('filtro-vendedor').value,
+    cliente: (document.getElementById('filtro-cliente-reporte').value || '').trim().toLowerCase()
+  };
+}
+
+// Filtrar y previsualizar reporte
+function filtrarReporte() {
+  console.log('[filtrarReporte] Iniciando filtrado...');
+  var tbody = document.getElementById('tbody-reporte');
+  var conteo = document.getElementById('conteo-reporte');
+  tbody.innerHTML = '<tr><td colspan="11" class="sin-datos">Cargando órdenes...</td></tr>';
+  conteo.textContent = '';
+
+  var filtrosServidor = {
+    estado: document.getElementById('filtro-estado-reporte').value || null,
+    id_vendedor: document.getElementById('filtro-vendedor').value || null
+  };
+  // Pasar null si no hay filtros de servidor
+  if (!filtrosServidor.estado && !filtrosServidor.id_vendedor) filtrosServidor = null;
+
+  google.script.run
+    .withSuccessHandler(function(ordenes) {
+      console.log('[filtrarReporte] Órdenes recibidas:', ordenes ? ordenes.length : 0);
+      if (!ordenes || ordenes.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="11" class="sin-datos">No hay órdenes con estos filtros</td></tr>';
+        conteo.textContent = 'Mostrando 0 órdenes';
+        return;
+      }
+
+      // Aplicar filtros adicionales del lado del cliente
+      var filtros = obtenerFiltrosReporte();
+      var resultado = ordenes;
+
+      // Filtro por fecha inicio
+      if (filtros.fecha_inicio) {
+        resultado = resultado.filter(function(o) {
+          return String(o.fecha || '').substring(0, 10) >= filtros.fecha_inicio;
+        });
+      }
+      // Filtro por fecha fin
+      if (filtros.fecha_fin) {
+        resultado = resultado.filter(function(o) {
+          return String(o.fecha || '').substring(0, 10) <= filtros.fecha_fin;
+        });
+      }
+      // Filtro por cliente (texto libre)
+      if (filtros.cliente) {
+        resultado = resultado.filter(function(o) {
+          return String(o.nombre_cliente || '').toLowerCase().indexOf(filtros.cliente) !== -1;
+        });
+      }
+
+      conteo.textContent = 'Mostrando ' + resultado.length + ' órdenes';
+
+      if (resultado.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="11" class="sin-datos">No hay órdenes con estos filtros</td></tr>';
+        return;
+      }
+
+      renderizarTablaReporte(resultado);
+    })
+    .withFailureHandler(function(error) {
+      console.error('[filtrarReporte] Error:', error);
+      tbody.innerHTML = '<tr><td colspan="11" class="sin-datos">Error al cargar: ' + error.message + '</td></tr>';
+      conteo.textContent = '';
+    })
+    .obtenerOrdenes(filtrosServidor);
+}
+
+// Renderizar tabla de previsualización del reporte
+function renderizarTablaReporte(ordenes) {
+  var tbody = document.getElementById('tbody-reporte');
+  var html = '';
+
+  for (var i = 0; i < ordenes.length; i++) {
+    var o = ordenes[i];
+    var fechaCorta = String(o.fecha || '').substring(0, 10);
+    var horaStr = String(o.hora_creacion || '');
+    if (horaStr.length > 10 && horaStr.indexOf(' ') !== -1) {
+      horaStr = horaStr.split(' ')[1] || horaStr;
+    }
+    var limiteCorta = o.fecha_limite_devolucion ? String(o.fecha_limite_devolucion).substring(0, 10) : '—';
+    var badgeClass = obtenerClaseBadge(o.estado);
+
+    // Color de fila según estado
+    var estiloFila = '';
+    if (o.estado === 'Por Cobrar/Devolver') estiloFila = ' style="background:#ffcccc;"';
+    else if (o.estado === 'Regresado') estiloFila = ' style="background:#f5f5f5;"';
+
+    html += '<tr' + estiloFila + '>' +
+      '<td><strong>' + (o.numero_op || '—') + '</strong></td>' +
+      '<td>' + fechaCorta + '</td>' +
+      '<td>' + (o.nombre_cliente || '—') + '</td>' +
+      '<td>' + (o.local_origen || '—') + '</td>' +
+      '<td>' + (o.nombre_vendedor || '—') + '</td>' +
+      '<td>' + (o.nombre_receptor || '—') + '</td>' +
+      '<td>' + formatearMoneda(o.valor_total || 0) + '</td>' +
+      '<td>' + horaStr + '</td>' +
+      '<td>' + limiteCorta + '</td>' +
+      '<td><span class="badge ' + badgeClass + '">' + (o.estado || '—') + '</span></td>' +
+      '<td>' + (o.observaciones || '—') + '</td>' +
+      '</tr>';
+  }
+
+  tbody.innerHTML = html;
+}
+
+// Limpiar todos los filtros del reporte y recargar
+function limpiarFiltrosReporte() {
+  document.getElementById('filtro-fecha-inicio').value = '';
+  document.getElementById('filtro-fecha-fin').value = '';
+  document.getElementById('filtro-estado-reporte').value = '';
+  document.getElementById('filtro-vendedor').value = '';
+  document.getElementById('filtro-cliente-reporte').value = '';
+  // Limpiar tabla y contador
+  document.getElementById('tbody-reporte').innerHTML =
+    '<tr><td colspan="11" class="sin-datos">Haga clic en "Filtrar" para previsualizar órdenes</td></tr>';
+  document.getElementById('conteo-reporte').textContent = '';
+}
+
+// Cargar lista de vendedores en el dropdown del reporte
+function cargarVendedoresReporte() {
+  google.script.run
+    .withSuccessHandler(function(usuarios) {
+      var select = document.getElementById('filtro-vendedor');
+      // Mantener la opción "Todos"
+      select.innerHTML = '<option value="">Todos</option>';
+      for (var i = 0; i < usuarios.length; i++) {
+        var u = usuarios[i];
+        if (u.activo === 'Sí') {
+          var option = document.createElement('option');
+          option.value = u.id_usuario;
+          option.textContent = u.nombre;
+          select.appendChild(option);
+        }
+      }
+    })
+    .obtenerUsuarios();
+}
+
+// Descargar reporte Excel usando los filtros actuales
+function descargarExcel() {
+  var filtros = obtenerFiltrosReporte();
+  // Ajustar para que el servidor entienda el estado correctamente
+  if (filtros.estado === '') filtros.estado = 'Todos';
+
+  google.script.run
+    .withSuccessHandler(function(resultado) {
+      if (resultado.success) {
+        window.open(resultado.url, '_blank');
+      } else {
+        alert('Error al generar el reporte');
+      }
+    })
+    .withFailureHandler(function(error) {
+      alert('Error: ' + error.message);
+    })
+    .generarReporteExcel(filtros);
+}
+
+// ==================== REMISIÓN EN NUEVA PESTAÑA ====================
+// Genera un documento HTML tipo remisión y lo abre en una nueva pestaña
+// para imprimir o guardar como PDF con Ctrl+P del navegador.
+function imprimirRemision() {
+  if (!ordenSeleccionada) return;
+
+  var orden = ordenSeleccionada;
+  var detalle = detalleOrdenActual;
+
+  // Calcular total general
+  var totalGeneral = 0;
+  for (var i = 0; i < detalle.length; i++) {
+    totalGeneral += detalle[i].valor_total || 0;
+  }
+
+  // Fecha y hora de impresión
+  var ahora = new Date();
+  var fechaImpresion = ahora.toLocaleDateString('es-CO', {
+    day: '2-digit', month: '2-digit', year: 'numeric'
+  }) + ' ' + ahora.toLocaleTimeString('es-CO', {
+    hour: '2-digit', minute: '2-digit'
+  });
+
+  // Formatear moneda colombiana sin decimales
+  function fmt(num) {
+    return '$' + Number(num).toLocaleString('es-CO', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    });
+  }
+
+  // Escapar texto para prevenir XSS en el HTML generado
+  function esc(str) {
+    return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // Construir filas de la tabla de productos
+  var filasProductos = '';
+  if (detalle.length === 0) {
+    filasProductos = '<tr><td colspan="5" style="text-align:center; color:#666; padding:12px;">Sin productos registrados</td></tr>';
+  } else {
+    for (var j = 0; j < detalle.length; j++) {
+      var d = detalle[j];
+      filasProductos +=
+        '<tr>' +
+          '<td style="text-align:center;">' + (j + 1) + '</td>' +
+          '<td>' + esc(d.descripcion_libre) + '</td>' +
+          '<td style="text-align:center;">' + esc(d.cantidad) + '</td>' +
+          '<td style="text-align:right;">' + fmt(d.valor_unitario) + '</td>' +
+          '<td style="text-align:right;">' + fmt(d.valor_total) + '</td>' +
+        '</tr>';
+    }
+  }
+
+  // Construir HTML completo del documento
+  var html = '<!DOCTYPE html>' +
+    '<html lang="es">' +
+    '<head>' +
+      '<meta charset="UTF-8">' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+      '<title>Remisión ' + esc(orden.numero_op) + '</title>' +
+      '<style>' +
+        /* Configuración de página para impresión */
+        '@page { size: letter; margin: 15mm; }' +
+        'body { font-family: Arial, sans-serif; font-size: 13px; color: #000; background: #fff; margin: 0; padding: 20px; }' +
+        /* Encabezado */
+        '.doc-header { text-align: center; margin-bottom: 20px; }' +
+        '.doc-header h1 { font-size: 28px; font-weight: bold; letter-spacing: 4px; margin: 0 0 6px 0; }' +
+        '.doc-header h2 { font-size: 16px; font-weight: bold; margin: 0 0 4px 0; }' +
+        '.doc-header p { font-size: 13px; margin: 0; color: #333; }' +
+        'hr { border: none; border-top: 2px solid #000; margin: 16px 0; }' +
+        /* Grid de datos de la orden */
+        '.datos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; margin-bottom: 20px; padding: 12px; border: 1px solid #ccc; border-radius: 4px; }' +
+        '.dato-campo { display: flex; flex-direction: column; }' +
+        '.dato-campo label { font-size: 10px; font-weight: bold; text-transform: uppercase; color: #555; margin-bottom: 2px; }' +
+        '.dato-campo span { font-size: 13px; color: #000; }' +
+        /* Tabla de productos */
+        'table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }' +
+        'thead th { background: #f0f0f0; font-weight: bold; padding: 8px 6px; border: 1px solid #999; font-size: 12px; }' +
+        'tbody td { padding: 7px 6px; border: 1px solid #ccc; font-size: 13px; }' +
+        'tbody tr:nth-child(even) { background: #fafafa; }' +
+        '.fila-total { border-top: 2px solid #000; }' +
+        '.fila-total td { padding: 8px 6px; font-weight: bold; font-size: 14px; border: none; }' +
+        /* Observaciones */
+        '.observaciones { margin-bottom: 28px; }' +
+        '.observaciones strong { font-size: 13px; display: block; margin-bottom: 4px; }' +
+        '.observaciones p { margin: 0; color: #333; }' +
+        /* Bloque de firmas */
+        '.firmas { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 40px; margin-bottom: 16px; }' +
+        '.firma-bloque { text-align: center; }' +
+        '.firma-linea { border-top: 1px solid #000; margin: 0 20px 6px 20px; padding-top: 6px; font-size: 13px; font-weight: bold; }' +
+        /* Pie de página */
+        '.pie-impresion { font-size: 10px; color: #888; text-align: center; margin-top: 20px; border-top: 1px solid #eee; padding-top: 8px; }' +
+        /* Botón imprimir (solo en pantalla) */
+        '.btn-imprimir-remision { display: block; margin: 0 auto 24px auto; padding: 12px 32px; background: #ffcf22; color: #1a1a1a; border: none; border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer; }' +
+        '.btn-imprimir-remision:hover { background: #f0c000; }' +
+        '@media print { .no-print { display: none !important; } body { padding: 0; } }' +
+      '</style>' +
+    '</head>' +
+    '<body>' +
+
+      /* Botón imprimir visible solo en pantalla */
+      '<div class="no-print" style="text-align:center; margin-bottom:24px;">' +
+        '<button class="btn-imprimir-remision" onclick="window.print()">🖨 Imprimir / Guardar PDF</button>' +
+      '</div>' +
+
+      /* Encabezado del documento */
+      '<div class="doc-header">' +
+        '<h1>ORDEN DE PEDIDO</h1>' +
+        '<h2>' + esc(orden.numero_op) + '</h2>' +
+        '<p>Fecha de creación: ' + esc(orden.fecha) + '</p>' +
+      '</div>' +
+      '<hr>' +
+
+      /* Datos de la orden en grid 2 columnas */
+      '<div class="datos-grid">' +
+        '<div class="dato-campo">' +
+          '<label>Cliente / Local</label>' +
+          '<span>' + esc(orden.nombre_cliente || '—') + '</span>' +
+        '</div>' +
+        '<div class="dato-campo">' +
+          '<label>Local de origen</label>' +
+          '<span>' + esc(orden.local_origen || '—') + '</span>' +
+        '</div>' +
+        '<div class="dato-campo">' +
+          '<label>Recibe equipo</label>' +
+          '<span>' + esc(orden.nombre_receptor || '—') + '</span>' +
+        '</div>' +
+        '<div class="dato-campo">' +
+          '<label>Estado</label>' +
+          '<span>' + esc(orden.estado || '—') + '</span>' +
+        '</div>' +
+      '</div>' +
+
+      /* Tabla de productos */
+      '<table>' +
+        '<thead>' +
+          '<tr>' +
+            '<th style="width:40px;">#</th>' +
+            '<th style="text-align:left;">Descripción</th>' +
+            '<th style="width:60px;">Cant</th>' +
+            '<th style="width:110px; text-align:right;">Valor Unit.</th>' +
+            '<th style="width:110px; text-align:right;">Valor Total</th>' +
+          '</tr>' +
+        '</thead>' +
+        '<tbody>' + filasProductos + '</tbody>' +
+        '<tfoot>' +
+          '<tr class="fila-total">' +
+            '<td colspan="3"></td>' +
+            '<td style="text-align:right;">TOTAL:</td>' +
+            '<td style="text-align:right;">' + fmt(totalGeneral) + '</td>' +
+          '</tr>' +
+        '</tfoot>' +
+      '</table>' +
+
+      /* Observaciones */
+      '<div class="observaciones">' +
+        '<strong>Observaciones:</strong>' +
+        '<p>' + esc(orden.observaciones || 'Sin observaciones') + '</p>' +
+      '</div>' +
+
+      /* Firmas */
+      '<div class="firmas">' +
+        '<div class="firma-bloque">' +
+          '<div style="height:50px;"></div>' +
+          '<div class="firma-linea">Entrega: ________________________</div>' +
+        '</div>' +
+        '<div class="firma-bloque">' +
+          '<div style="height:50px;"></div>' +
+          '<div class="firma-linea">Recibe: ________________________</div>' +
+        '</div>' +
+      '</div>' +
+
+      /* Pie de fecha de impresión */
+      '<p class="pie-impresion">Impreso el: ' + fechaImpresion + '</p>' +
+
+    '</body></html>';
+
+  // Abrir nueva pestaña y escribir el HTML
+  var nuevaVentana = window.open('', '_blank');
+  if (nuevaVentana) {
+    nuevaVentana.document.write(html);
+    nuevaVentana.document.close();
+  } else {
+    alert('El navegador bloqueó la nueva pestaña. Permite ventanas emergentes para este sitio.');
+  }
+}
+
+// ==================== IMPRESIÓN PDF ====================
+function imprimirOrden() {
+  // Actualizar pie de página del PDF con fecha y estado actual
+  var ahora = new Date();
+  var fechaImpresion = ahora.toLocaleDateString('es-CO') + ' ' + ahora.toLocaleTimeString('es-CO');
+  document.getElementById('print-footer-fecha').textContent = 'Fecha de impresión: ' + fechaImpresion;
+  if (ordenSeleccionada) {
+    document.getElementById('print-footer-estado').textContent = 'Estado actual: ' + ordenSeleccionada.estado;
+  }
+  window.print();
+}
+
+// ==================== CONFIGURACIÓN (Super admin) ====================
+
+// Mapa de parámetros de configuración → IDs de campos del formulario
+var CONFIG_CAMPO_MAP = {
+  nombre_comercial: 'cfg-nombre-comercial',
+  nombre_juridico: 'cfg-nombre-juridico',
+  direccion: 'cfg-direccion',
+  correo: 'cfg-correo',
+  celular: 'cfg-celular',
+  ciudad: 'cfg-ciudad',
+  logo_url: 'cfg-logo-url'
+};
+
+// Cambiar tab activo en módulo Configuración (solo CSS, sin recargar)
+function cambiarTabConfig(tabNombre) {
+  // Actualizar botones de tab
+  var tabs = document.querySelectorAll('.config-tab');
+  for (var i = 0; i < tabs.length; i++) {
+    tabs[i].classList.remove('config-tab-activo');
+    if (tabs[i].getAttribute('data-config-tab') === tabNombre) {
+      tabs[i].classList.add('config-tab-activo');
+    }
+  }
+  // Mostrar/ocultar paneles
+  document.getElementById('config-panel-negocio').style.display =
+    tabNombre === 'negocio' ? 'block' : 'none';
+  document.getElementById('config-panel-consecutivos').style.display =
+    tabNombre === 'consecutivos' ? 'block' : 'none';
+}
+
+// Cargar configuración general y de consecutivos — llena ambos tabs sin destruir el DOM
+function cargarConfiguracion() {
+  google.script.run
+    .withSuccessHandler(function(config) {
+      window.appConfig = config;
+      // Llenar campos del formulario de datos del negocio
+      var keys = Object.keys(CONFIG_CAMPO_MAP);
+      for (var i = 0; i < keys.length; i++) {
+        var param = keys[i];
+        var campo = document.getElementById(CONFIG_CAMPO_MAP[param]);
+        if (campo) campo.value = config[param] || '';
+      }
+      // Preview del logo
+      previewLogoCfgForm();
+    })
+    .withFailureHandler(function(error) {
+      mostrarMensajeConfig('Error al cargar configuración: ' + error.message, 'error');
+    })
+    .getConfiguracion();
+
+  // Cargar datos de consecutivos
+  cargarInfoConsecutivo();
+}
+
+// Preview automático del logo en el formulario de configuración
+function previewLogoCfgForm() {
+  var input = document.getElementById('cfg-logo-url');
+  var preview = document.getElementById('cfg-logo-preview');
+  if (!input || !preview) return;
+  var url = input.value.trim();
+  if (url) {
+    preview.src = url;
+    preview.onload = function() { preview.style.display = 'block'; };
+    preview.onerror = function() { preview.style.display = 'none'; };
+  } else {
+    preview.style.display = 'none';
+  }
+}
+
+// ==================== CONSECUTIVOS OP ====================
+
+// Cargar y renderizar la sección de control de consecutivos
+function cargarInfoConsecutivo() {
+  google.script.run
+    .withSuccessHandler(renderizarInfoConsecutivo)
+    .withFailureHandler(function() {
+      document.getElementById('consec-progreso-texto').textContent = 'Error al cargar datos de consecutivo.';
+    })
+    .obtenerInfoConsecutivo();
+}
+
+// Actualizar la UI de la sección de consecutivos con los datos del servidor
+function renderizarInfoConsecutivo(info) {
+  document.getElementById('consec-inicio').value = info.inicio;
+  document.getElementById('consec-fin').value    = info.fin;
+  document.getElementById('consec-actual-display').textContent =
+    info.actual === 0 ? 'Sin usar' : info.actual;
+
+  // Barra de progreso con color según porcentaje de uso
+  var pct   = Math.min(info.porcentajeUso, 100);
+  var barra = document.getElementById('consec-barra');
+  barra.style.width = pct + '%';
+
+  if (pct >= 90) {
+    barra.style.background = '#f44336'; // Rojo: uso crítico
+  } else if (pct >= 70) {
+    barra.style.background = '#ff9800'; // Naranja: uso alto
+  } else {
+    barra.style.background = '#4caf50'; // Verde: uso normal
+  }
+
+  var rango = info.fin - info.inicio + 1;
+  document.getElementById('consec-progreso-texto').textContent =
+    'Usados: ' + info.usados + ' de ' + rango + '  —  Disponibles: ' + info.disponibles;
+}
+
+// Guardar el rango de consecutivos (inicio y fin) en el backend
+function guardarRangoConsecutivo() {
+  var inicio = parseInt(document.getElementById('consec-inicio').value, 10);
+  var fin    = parseInt(document.getElementById('consec-fin').value,    10);
+
+  if (isNaN(inicio) || isNaN(fin) || inicio < 1 || fin < 1) {
+    mostrarMensajeConsec('Ingrese valores numéricos enteros y positivos.', 'error');
+    return;
+  }
+  if (inicio >= fin) {
+    mostrarMensajeConsec('El inicio debe ser menor que el fin.', 'error');
+    return;
+  }
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.ok) {
+        mostrarMensajeConsec(res.mensaje || 'Rango guardado correctamente.', 'exito');
+        cargarInfoConsecutivo();
+      } else {
+        mostrarMensajeConsec(res.mensaje || 'Error al guardar el rango.', 'error');
+      }
+    })
+    .withFailureHandler(function(e) {
+      mostrarMensajeConsec('Error: ' + e.message, 'error');
+    })
+    .actualizarRangoConsecutivo(inicio, fin);
+}
+
+// Pedir confirmación antes de reiniciar el consecutivo
+function confirmarReinicioConsecutivo() {
+  var inicio = document.getElementById('consec-inicio').value || '?';
+  var ok = window.confirm(
+    '¿Está seguro de reiniciar el consecutivo?\n' +
+    'La siguiente OP empezará desde ' + inicio + '.\n' +
+    'Esta acción no se puede deshacer.'
+  );
+  if (ok) ejecutarReinicioConsecutivo();
+}
+
+// Ejecutar el reinicio del consecutivo en el backend
+function ejecutarReinicioConsecutivo() {
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.ok) {
+        mostrarMensajeConsec(res.mensaje || 'Consecutivo reiniciado.', 'exito');
+        cargarInfoConsecutivo();
+      } else {
+        mostrarMensajeConsec(res.mensaje || 'Error al reiniciar.', 'error');
+      }
+    })
+    .withFailureHandler(function(e) {
+      mostrarMensajeConsec('Error: ' + e.message, 'error');
+    })
+    .reiniciarConsecutivo();
+}
+
+// Mostrar mensaje temporal en la sección de consecutivos
+function mostrarMensajeConsec(texto, tipo) {
+  var el = document.getElementById('consec-mensaje');
+  el.textContent = texto;
+  el.className = 'config-mensaje ' + tipo;
+  el.style.display = 'inline-block';
+  setTimeout(function() { el.style.display = 'none'; }, 5000);
+}
+
+// Escape HTML para evitar inyección
+function escapeHtml(text) {
+  if (!text) return '';
+  var div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// Guardar todos los cambios de configuración (lee desde campos del formulario)
+function guardarConfiguracion() {
+  var cambios = [];
+  var keys = Object.keys(CONFIG_CAMPO_MAP);
+
+  for (var i = 0; i < keys.length; i++) {
+    var param = keys[i];
+    var campo = document.getElementById(CONFIG_CAMPO_MAP[param]);
+    if (!campo) continue;
+    var valor = campo.value;
+    if (window.appConfig[param] !== valor) {
+      cambios.push({ parametro: param, valor: valor });
+    }
+  }
+
+  if (cambios.length === 0) {
+    mostrarMensajeConfig('No hay cambios para guardar', 'info');
+    return;
+  }
+
+  var btn = document.getElementById('btn-guardar-config');
+  btn.disabled = true;
+  btn.textContent = 'Guardando...';
+
+  var completados = 0;
+  var errores = 0;
+
+  for (var j = 0; j < cambios.length; j++) {
+    (function(cambio) {
+      google.script.run
+        .withSuccessHandler(function(resultado) {
+          completados++;
+          if (!resultado.ok) errores++;
+          // Actualizar la variable global
+          window.appConfig[cambio.parametro] = cambio.valor;
+          verificarFinGuardadoConfig(completados, cambios.length, errores, btn);
+        })
+        .withFailureHandler(function() {
+          completados++;
+          errores++;
+          verificarFinGuardadoConfig(completados, cambios.length, errores, btn);
+        })
+        .actualizarConfiguracion(cambio.parametro, cambio.valor);
+    })(cambios[j]);
+  }
+}
+
+// Verificar si todos los cambios terminaron de guardar
+function verificarFinGuardadoConfig(completados, total, errores, btn) {
+  if (completados < total) return;
+
+  btn.disabled = false;
+  btn.innerHTML = '<span class="material-icons" style="font-size:16px; vertical-align:middle;">save</span> Guardar cambios';
+
+  if (errores > 0) {
+    mostrarMensajeConfig('Se guardaron con ' + errores + ' error(es)', 'error');
+  } else {
+    mostrarMensajeConfig('Configuración guardada correctamente', 'exito');
+    // Re-renderizar logo y nombre en sidebar/navbar sin recargar
+    aplicarConfigDashboard();
+  }
+}
+
+// Mostrar mensaje de resultado en la pantalla de configuración
+function mostrarMensajeConfig(mensaje, tipo) {
+  var msgEl = document.getElementById('config-mensaje');
+  msgEl.textContent = mensaje;
+  msgEl.className = 'config-mensaje ' + tipo;
+  msgEl.style.display = 'inline-block';
+  setTimeout(function() { msgEl.style.display = 'none'; }, 4000);
+}
+
+// ==================== UTILIDADES ====================
+
+// Mostrar notificación flotante tipo toast (reemplaza alert() para mensajes de éxito)
+function mostrarNotificacion(mensaje, tipo) {
+  var notif = document.getElementById('notificacion-toast');
+  if (!notif) {
+    notif = document.createElement('div');
+    notif.id = 'notificacion-toast';
+    notif.className = 'notificacion-toast';
+    document.body.appendChild(notif);
+  }
+  notif.textContent = mensaje;
+  notif.className = 'notificacion-toast notif-' + (tipo || 'exito') + ' notif-visible';
+  clearTimeout(notif._timeout);
+  notif._timeout = setTimeout(function() {
+    notif.classList.remove('notif-visible');
+  }, 3500);
+}
+
+function cerrarModal(idModal) {
+  var el = document.getElementById(idModal);
+  if (el) el.style.display = 'none';
+}
+
+// Cerrar modal al hacer clic fuera
+document.addEventListener('click', function(e) {
+  if (e.target.classList.contains('modal-overlay')) {
+    e.target.style.display = 'none';
+  }
+});
+
+// Enter en login
+document.getElementById('login-password').addEventListener('keypress', function(e) {
+  if (e.key === 'Enter') iniciarSesion();
+});
+
+// ==================== SIDEBAR — TOGGLE COLAPSABLE ====================
+
+// Alternar entre sidebar expandido y colapsado
+function toggleSidebar() {
+  var sidebar = document.getElementById('sidebar');
+  var btnIcon = document.querySelector('#btn-colapsar .material-icons');
+
+  if (sidebar.classList.contains('sidebar-colapsado')) {
+    // Expandir
+    sidebar.classList.remove('sidebar-colapsado');
+    sidebar.classList.add('sidebar-expandido');
+    if (btnIcon) btnIcon.textContent = 'menu';
+    localStorage.setItem('sidebar_estado', 'expandido');
+  } else {
+    // Colapsar
+    sidebar.classList.remove('sidebar-expandido');
+    sidebar.classList.add('sidebar-colapsado');
+    if (btnIcon) btnIcon.textContent = 'chevron_right';
+    localStorage.setItem('sidebar_estado', 'colapsado');
+  }
+}
+
+// Restaurar estado del sidebar al cargar la app
+function inicializarSidebar() {
+  var estadoGuardado = localStorage.getItem('sidebar_estado');
+  var sidebar = document.getElementById('sidebar');
+  var btnIcon = document.querySelector('#btn-colapsar .material-icons');
+
+  if (estadoGuardado === 'colapsado') {
+    // Aplicar sin animación al inicio
+    sidebar.style.transition = 'none';
+    sidebar.classList.remove('sidebar-expandido');
+    sidebar.classList.add('sidebar-colapsado');
+    if (btnIcon) btnIcon.textContent = 'chevron_right';
+    // Restaurar transición después de un frame
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        sidebar.style.transition = '';
+      });
+    });
+  }
+}
+
+// ==================== SIDEBAR — MOBILE DRAWER ====================
+
+// Abrir sidebar como drawer en mobile
+function abrirSidebarMobile() {
+  var sidebar = document.getElementById('sidebar');
+  var overlay = document.getElementById('overlay-sidebar');
+  sidebar.classList.add('sidebar-abierto-mobile');
+  overlay.classList.add('activo');
+}
+
+// Cerrar sidebar drawer en mobile
+function cerrarSidebarMobile() {
+  var sidebar = document.getElementById('sidebar');
+  var overlay = document.getElementById('overlay-sidebar');
+  sidebar.classList.remove('sidebar-abierto-mobile');
+  overlay.classList.remove('activo');
+}
+
+// ==================== PERMISOS POR ROL ====================
+
+// Mostrar u ocultar ítems del sidebar según el rol del usuario
+function aplicarPermisosPorRol(rol) {
+  var navProductos = document.getElementById('nav-productos');
+  var navUsuarios = document.getElementById('nav-usuarios');
+  var navReportes = document.getElementById('nav-reportes');
+  var navConfig = document.getElementById('nav-configuracion');
+
+  // Mostrar u ocultar columnas de acciones según rol
+  var colsAcciones = document.querySelectorAll('.col-acciones-admin');
+  for (var a = 0; a < colsAcciones.length; a++) {
+    colsAcciones[a].style.display = (rol === 'Super admin') ? '' : 'none';
+  }
+
+  if (rol === 'Super admin') {
+    // Super admin: acceso total a todos los módulos
+    if (navProductos) navProductos.style.display = 'flex';
+    if (navUsuarios) navUsuarios.style.display = 'flex';
+    if (navReportes) navReportes.style.display = 'flex';
+    if (navConfig) navConfig.style.display = 'flex';
+  } else {
+    // Auxiliar y Vendedor: Órdenes + Clientes + Productos
+    if (navProductos) navProductos.style.display = 'flex';
+    if (navUsuarios) navUsuarios.style.display = 'none';
+    if (navReportes) navReportes.style.display = 'none';
+    if (navConfig) navConfig.style.display = 'none';
+  }
+}
+</script>
