@@ -22,6 +22,101 @@ var ESTADOS = {
 };
 
 // ============================================================
+// MAPEO DE COLUMNAS POR NOMBRE
+// El código leía las columnas por posición fija (fila[0], fila[6]...).
+// Si alguien inserta, mueve o renombra una columna en el Sheet, todas
+// las lecturas se corren y la app deja de encontrar id_op y valor_total.
+// Estas utilidades ubican cada columna por el nombre del encabezado y
+// solo usan la posición esperada como respaldo.
+// ============================================================
+var COLUMNAS_ESPERADAS = {
+  'Orden_Pedido': [
+    'id_op', 'numero_op', 'id_cliente', 'id_vendedor', 'fecha', 'hora_creacion',
+    'estado', 'local_origen', 'observaciones', 'fecha_prestamo',
+    'fecha_limite_devolucion', 'dias_habiles_prestamo', 'alerta_vencimiento',
+    'nombre_receptor', 'valor_total'
+  ],
+  'Detalle_Pedido': [
+    'id_detalle', 'id_op', 'id_producto', 'descripcion_libre', 'cantidad',
+    'valor_unitario', 'valor_total', 'estado_item', 'hora_entrega', 'hora_regreso'
+  ]
+};
+
+// Devuelve un mapa {nombre_columna: indice} a partir de la fila de encabezados.
+// La búsqueda por nombre ignora mayúsculas, espacios y acentos accidentales.
+// Si una columna no aparece en la hoja se usa su posición esperada.
+function mapearColumnas(encabezados, nombreHoja) {
+  var mapa = {};
+  var esperadas = COLUMNAS_ESPERADAS[nombreHoja] || [];
+
+  for (var i = 0; i < encabezados.length; i++) {
+    var nombre = normalizarEncabezado(encabezados[i]);
+    if (nombre && !mapa.hasOwnProperty(nombre)) mapa[nombre] = i;
+  }
+
+  // Respaldo por posición para hojas antiguas sin el encabezado exacto
+  for (var e = 0; e < esperadas.length; e++) {
+    if (!mapa.hasOwnProperty(esperadas[e])) mapa[esperadas[e]] = e;
+  }
+
+  return mapa;
+}
+
+// Normaliza el texto de un encabezado: minúsculas, sin espacios sobrantes
+// y con espacios internos convertidos a guion bajo ("Id OP" → "id_op")
+function normalizarEncabezado(valor) {
+  return String(valor === null || valor === undefined ? '' : valor)
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_');
+}
+
+// Arma la fila a escribir colocando cada valor en el índice que le
+// corresponde según el mapa de columnas de la hoja.
+function construirFila(mapaColumnas, valores) {
+  var maxIndice = -1;
+  for (var clave in mapaColumnas) {
+    if (mapaColumnas[clave] > maxIndice) maxIndice = mapaColumnas[clave];
+  }
+
+  var fila = [];
+  for (var i = 0; i <= maxIndice; i++) fila.push('');
+
+  for (var campo in valores) {
+    if (mapaColumnas.hasOwnProperty(campo)) {
+      fila[mapaColumnas[campo]] = valores[campo];
+    }
+  }
+  return fila;
+}
+
+// Convierte el contenido de una celda en texto seguro para el cliente.
+// Las fechas se envían formateadas porque google.script.run no serializa
+// objetos Date y el valor llegaría vacío al frontend.
+function formatearCelda(valor) {
+  if (valor === null || valor === undefined) return '';
+  if (valor instanceof Date) {
+    return Utilities.formatDate(valor, 'America/Bogota', 'yyyy-MM-dd HH:mm:ss');
+  }
+  return valor;
+}
+
+// Normaliza un id para comparar entre hojas.
+// Google Sheets puede guardar el mismo id como texto en una hoja y como
+// número en otra; String(numeroLargo) produce notación científica y rompe
+// la comparación. Esta función devuelve siempre la misma representación.
+function normalizarId(valor) {
+  if (valor === null || valor === undefined) return '';
+  if (typeof valor === 'number') {
+    if (isFinite(valor) && Math.floor(valor) === valor && Math.abs(valor) < 1e21) {
+      return valor.toFixed(0);
+    }
+    return String(valor).toUpperCase();
+  }
+  return String(valor).trim().toUpperCase();
+}
+
+// ============================================================
 // FUNCIÓN PRINCIPAL: Crear todas las tablas (hojas) en el Sheet
 // Ejecutar UNA SOLA VEZ desde el editor de Apps Script
 // ============================================================
@@ -469,33 +564,215 @@ function recalcularValoresTotales() {
   var datosDetalle = hojaDetalle.getDataRange().getValues();
   var encabezadosOP = datosOP[0];
 
-  // Buscar índice de la columna valor_total en Orden_Pedido
-  var colValorTotal = encabezadosOP.indexOf('valor_total');
+  // Ubicar columnas por nombre de encabezado
+  var colOP = mapearColumnas(encabezadosOP, 'Orden_Pedido');
+  var colDet = mapearColumnas(datosDetalle.length ? datosDetalle[0] : [], 'Detalle_Pedido');
+
+  var colValorTotal = encabezadosOP.map(normalizarEncabezado).indexOf('valor_total');
   if (colValorTotal === -1) {
     Logger.log('Columna valor_total no existe. Ejecuta agregarColumnaValorTotal() primero.');
-    return;
+    return 'La columna valor_total no existe. Ejecuta agregarColumnaValorTotal() primero.';
   }
 
   // Construir mapa de totales por id_op desde Detalle_Pedido
-  // Columnas en Detalle_Pedido: 0=id_detalle, 1=id_op, 6=valor_total
   var totalesPorOrden = {};
   for (var d = 1; d < datosDetalle.length; d++) {
-    var idOp = String(datosDetalle[d][1]);
-    var valorItem = Number(datosDetalle[d][6]) || 0;
+    var idOp = normalizarId(datosDetalle[d][colDet.id_op]);
+    if (!idOp) continue;
+    var valorItem = Number(datosDetalle[d][colDet.valor_total]) || 0;
     totalesPorOrden[idOp] = (totalesPorOrden[idOp] || 0) + valorItem;
   }
 
-  // Actualizar cada orden con su valor_total calculado
+  // Actualizar cada orden con su valor_total calculado.
+  // No se sobreescribe con 0 una orden que ya tenía valor guardado: eso
+  // borraría el dato de órdenes cuyo detalle esté desenlazado.
   var actualizadas = 0;
+  var sinDetalle = 0;
   for (var i = 1; i < datosOP.length; i++) {
-    var idOrden = String(datosOP[i][0]);
+    var idOrden = normalizarId(datosOP[i][colOP.id_op]);
+    if (!idOrden) continue;
+
     var valorCalculado = totalesPorOrden[idOrden] || 0;
+    if (valorCalculado === 0) {
+      sinDetalle++;
+      continue;
+    }
+
     hojaOP.getRange(i + 1, colValorTotal + 1).setValue(valorCalculado);
     actualizadas++;
   }
 
-  Logger.log('Valores recalculados para ' + actualizadas + ' órdenes');
-  return 'Recalculadas ' + actualizadas + ' órdenes';
+  Logger.log('Valores recalculados para ' + actualizadas + ' órdenes (' + sinDetalle + ' sin detalle enlazado)');
+  return 'Recalculadas ' + actualizadas + ' órdenes. ' + sinDetalle + ' quedaron sin cambio por no tener detalle enlazado.';
+}
+
+// ============================================================
+// DIAGNÓSTICO — ejecutar desde el editor de Apps Script y revisar
+// el registro de ejecución (Ver → Registros).
+// Reporta por qué el botón "Ver" no abre o por qué el valor sale en $0:
+// ambos síntomas vienen de que id_op no se está leyendo o no enlaza
+// con Detalle_Pedido.
+// ============================================================
+function diagnosticarSistema() {
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var lineas = [];
+
+  lineas.push('=== DIAGNÓSTICO ÓRDENES DE PEDIDO ===');
+  lineas.push('Hoja de cálculo: ' + ss.getName());
+
+  var hojaOP = ss.getSheetByName('Orden_Pedido');
+  var hojaDetalle = ss.getSheetByName('Detalle_Pedido');
+
+  if (!hojaOP)      lineas.push('ERROR: no existe la hoja "Orden_Pedido"');
+  if (!hojaDetalle) lineas.push('ERROR: no existe la hoja "Detalle_Pedido"');
+  if (!hojaOP || !hojaDetalle) {
+    var salidaError = lineas.join('\n');
+    Logger.log(salidaError);
+    return salidaError;
+  }
+
+  var datosOP = hojaOP.getDataRange().getValues();
+  var datosDet = hojaDetalle.getDataRange().getValues();
+
+  // 1. Comparar encabezados reales contra los esperados
+  lineas.push('');
+  lineas.push('--- ENCABEZADOS ---');
+  lineas.push(revisarEncabezados('Orden_Pedido', datosOP[0]));
+  lineas.push(revisarEncabezados('Detalle_Pedido', datosDet[0]));
+
+  var colOP = mapearColumnas(datosOP[0], 'Orden_Pedido');
+  var colDet = mapearColumnas(datosDet[0], 'Detalle_Pedido');
+
+  // 2. Revisar el enlace id_op entre las dos hojas
+  var idsOrdenes = {};
+  var ordenesSinId = 0;
+  for (var i = 1; i < datosOP.length; i++) {
+    var idOrden = normalizarId(datosOP[i][colOP.id_op]);
+    if (!idOrden) { ordenesSinId++; continue; }
+    idsOrdenes[idOrden] = normalizarId(datosOP[i][colOP.numero_op]);
+  }
+
+  var detallesHuerfanos = 0;
+  var detallesSinId = 0;
+  var ordenesConDetalle = {};
+  for (var d = 1; d < datosDet.length; d++) {
+    var idDet = normalizarId(datosDet[d][colDet.id_op]);
+    if (!idDet) { detallesSinId++; continue; }
+    if (idsOrdenes.hasOwnProperty(idDet)) {
+      ordenesConDetalle[idDet] = true;
+    } else {
+      detallesHuerfanos++;
+    }
+  }
+
+  var totalOrdenes = 0;
+  var ordenesSinDetalle = [];
+  for (var clave in idsOrdenes) {
+    totalOrdenes++;
+    if (!ordenesConDetalle[clave]) ordenesSinDetalle.push(idsOrdenes[clave]);
+  }
+
+  lineas.push('');
+  lineas.push('--- ENLACE Orden_Pedido ↔ Detalle_Pedido ---');
+  lineas.push('Órdenes con id_op válido: ' + totalOrdenes);
+  lineas.push('Órdenes con id_op vacío: ' + ordenesSinId);
+  lineas.push('Filas de detalle totales: ' + Math.max(0, datosDet.length - 1));
+  lineas.push('Filas de detalle sin id_op: ' + detallesSinId);
+  lineas.push('Filas de detalle huérfanas (id_op no existe en Orden_Pedido): ' + detallesHuerfanos);
+  lineas.push('Órdenes SIN detalle enlazado: ' + ordenesSinDetalle.length);
+  if (ordenesSinDetalle.length > 0) {
+    lineas.push('  Ejemplos: ' + ordenesSinDetalle.slice(0, 10).join(', '));
+  }
+
+  // 3. Revisar tipos de dato de id_op: Sheets puede guardarlo como número
+  //    en una hoja y como texto en la otra, rompiendo la comparación
+  lineas.push('');
+  lineas.push('--- TIPO DE DATO DE id_op ---');
+  lineas.push('Orden_Pedido: ' + contarTiposColumna(datosOP, colOP.id_op));
+  lineas.push('Detalle_Pedido: ' + contarTiposColumna(datosDet, colDet.id_op));
+
+  // 4. Revisar valores en cero
+  var enCero = 0;
+  for (var v = 1; v < datosOP.length; v++) {
+    if (!normalizarId(datosOP[v][colOP.id_op])) continue;
+    if ((Number(datosOP[v][colOP.valor_total]) || 0) === 0) enCero++;
+  }
+  lineas.push('');
+  lineas.push('--- VALORES ---');
+  lineas.push('Órdenes con valor_total guardado en 0: ' + enCero + ' de ' + totalOrdenes);
+
+  // 5. Conclusión
+  lineas.push('');
+  lineas.push('--- CONCLUSIÓN ---');
+  if (detallesHuerfanos > 0 || ordenesSinDetalle.length > 0) {
+    lineas.push('El enlace entre la orden y su detalle está roto para ' +
+                ordenesSinDetalle.length + ' órdenes. Por eso el valor sale en $0 ' +
+                'y la pantalla "Ver" no muestra productos.');
+  }
+  if (ordenesSinId > 0) {
+    lineas.push('Hay ' + ordenesSinId + ' filas sin id_op: esas órdenes no se pueden abrir.');
+  }
+  if (detallesHuerfanos === 0 && ordenesSinDetalle.length === 0 && ordenesSinId === 0) {
+    lineas.push('Los datos están enlazados correctamente. Si el problema persiste, ' +
+                'vuelve a publicar la implementación de la Web App con una versión nueva.');
+  }
+
+  var salida = lineas.join('\n');
+  Logger.log(salida);
+  return salida;
+}
+
+// Compara los encabezados reales de una hoja contra los esperados
+function revisarEncabezados(nombreHoja, encabezados) {
+  var esperadas = COLUMNAS_ESPERADAS[nombreHoja] || [];
+  var reales = (encabezados || []).map(normalizarEncabezado);
+  var problemas = [];
+
+  for (var e = 0; e < esperadas.length; e++) {
+    var posicionReal = reales.indexOf(esperadas[e]);
+    if (posicionReal === -1) {
+      problemas.push('FALTA la columna "' + esperadas[e] + '"');
+    } else if (posicionReal !== e) {
+      problemas.push('"' + esperadas[e] + '" está en la columna ' +
+                     columnaALetra(posicionReal) + ' y se esperaba en ' + columnaALetra(e));
+    }
+  }
+
+  var texto = nombreHoja + ': ' + reales.join(' | ');
+  if (problemas.length > 0) {
+    texto += '\n  >> ' + problemas.join('\n  >> ');
+  } else {
+    texto += '\n  >> Estructura correcta';
+  }
+  return texto;
+}
+
+// Cuenta cuántos valores de una columna son texto y cuántos número
+function contarTiposColumna(datos, indice) {
+  var textos = 0, numeros = 0, vacios = 0;
+  for (var i = 1; i < datos.length; i++) {
+    var valor = datos[i][indice];
+    if (valor === '' || valor === null || valor === undefined) vacios++;
+    else if (typeof valor === 'number') numeros++;
+    else textos++;
+  }
+  var texto = textos + ' texto, ' + numeros + ' número, ' + vacios + ' vacíos';
+  if (textos > 0 && numeros > 0) {
+    texto += '  << MEZCLA DE TIPOS: puede romper el enlace entre hojas';
+  }
+  return texto;
+}
+
+// Convierte un índice de columna (0-based) a su letra (0 → A)
+function columnaALetra(indice) {
+  var letra = '';
+  var n = indice + 1;
+  while (n > 0) {
+    var resto = (n - 1) % 26;
+    letra = String.fromCharCode(65 + resto) + letra;
+    n = Math.floor((n - resto) / 26);
+  }
+  return letra;
 }
 
 // ============================================================
@@ -515,14 +792,16 @@ function migracionIdOp() {
 
   var datosOP = hojaOP.getDataRange().getValues();
   var datosDetalle = hojaDetalle.getDataRange().getValues();
+  var colOP = mapearColumnas(datosOP[0], 'Orden_Pedido');
+  var colDet = mapearColumnas(datosDetalle[0], 'Detalle_Pedido');
   var migradas = 0;
 
   for (var i = 1; i < datosOP.length; i++) {
-    var idActual = datosOP[i][0];
+    var idActual = datosOP[i][colOP.id_op];
 
     // Solo migrar si el id_op actual es numérico (no UUID)
     if (idActual === '' || idActual === null || idActual === undefined) continue;
-    var idStr = String(idActual);
+    var idStr = normalizarId(idActual);
 
     // Si ya parece UUID (contiene letras), saltar
     if (/[A-Za-z]/.test(idStr)) continue;
@@ -530,20 +809,20 @@ function migracionIdOp() {
     // Generar nuevo UUID para esta orden
     var nuevoUuid = generarIdUnico();
 
-    // Actualizar id_op en Orden_Pedido (columna A)
-    hojaOP.getRange(i + 1, 1).setValue(nuevoUuid);
+    // Actualizar id_op en Orden_Pedido
+    hojaOP.getRange(i + 1, colOP.id_op + 1).setValue(nuevoUuid);
 
     // Actualizar id_op FK en todas las filas de Detalle_Pedido que coincidan
     for (var d = 1; d < datosDetalle.length; d++) {
-      if (String(datosDetalle[d][1]) === idStr) {
-        hojaDetalle.getRange(d + 1, 2).setValue(nuevoUuid);
-        datosDetalle[d][1] = nuevoUuid; // Actualizar en memoria para evitar re-migración
+      if (normalizarId(datosDetalle[d][colDet.id_op]) === idStr) {
+        hojaDetalle.getRange(d + 1, colDet.id_op + 1).setValue(nuevoUuid);
+        datosDetalle[d][colDet.id_op] = nuevoUuid; // Actualizar en memoria para evitar re-migración
 
         // También migrar id_detalle si es numérico
-        var idDetalleActual = String(datosDetalle[d][0]);
+        var idDetalleActual = normalizarId(datosDetalle[d][colDet.id_detalle]);
         if (!/[A-Za-z]/.test(idDetalleActual)) {
           var nuevoIdDetalle = generarIdUnico();
-          hojaDetalle.getRange(d + 1, 1).setValue(nuevoIdDetalle);
+          hojaDetalle.getRange(d + 1, colDet.id_detalle + 1).setValue(nuevoIdDetalle);
         }
       }
     }
@@ -848,7 +1127,16 @@ function desactivarProducto(idProducto) {
 function generarIdUnico() {
   // Genera ID alfanumérico único de 12 caracteres en mayúsculas
   // Ejemplo resultado: "A3F9B2C1D4E5"
-  return Utilities.getUuid().replace(/-/g, '').substring(0, 12).toUpperCase();
+  var hex = Utilities.getUuid().replace(/-/g, '').toUpperCase();
+
+  // El id se fuerza a empezar por letra. Si quedara solo con dígitos, o con
+  // forma de notación científica (ej. "1234E5678901"), Google Sheets lo
+  // guardaría como número y dejaría de coincidir con el id guardado como
+  // texto en la otra hoja, rompiendo el enlace orden ↔ detalle.
+  var letras = hex.replace(/[0-9]/g, '');
+  var inicial = letras.length > 0 ? letras.charAt(0) : 'A';
+
+  return (inicial + hex).substring(0, 12);
 }
 
 // ============================================================
@@ -933,45 +1221,48 @@ function crearOrden(datosOrden, detalleItems) {
     valorTotalOrden += (detalleItems[t].cantidad || 0) * (detalleItems[t].valor_unitario || 0);
   }
 
-  // Insertar orden con id_op UUID
-  var filaOrden = [
-    nuevoIdOP,                    // id_op (UUID alfanumérico)
-    numeroOP,                     // numero_op (OP-YYYYMMDD-NNN visible)
-    datosOrden.id_cliente,        // id_cliente
-    datosOrden.id_vendedor,       // id_vendedor
-    fecha,                        // fecha
-    hora,                         // hora_creacion
-    ESTADOS.PENDIENTE,            // estado
-    datosOrden.local_origen,      // local_origen
-    datosOrden.observaciones || '',// observaciones
-    '',                           // fecha_prestamo
-    '',                           // fecha_limite_devolucion
-    1,                            // dias_habiles_prestamo (por defecto 1)
-    '',                           // alerta_vencimiento
-    datosOrden.nombre_receptor || '', // nombre_receptor (quien recibe el equipo)
-    valorTotalOrden               // valor_total
-  ];
+  // Insertar orden ubicando cada dato en su columna por nombre de encabezado,
+  // para que la escritura no se descuadre si el orden de columnas cambió
+  var colOP = mapearColumnas(hojaOP.getRange(1, 1, 1, hojaOP.getLastColumn()).getValues()[0], 'Orden_Pedido');
+  var filaOrden = construirFila(colOP, {
+    id_op: nuevoIdOP,                                  // UUID alfanumérico
+    numero_op: numeroOP,                               // OP-YYYYMMDD-NNN visible
+    id_cliente: datosOrden.id_cliente,
+    id_vendedor: datosOrden.id_vendedor,
+    fecha: fecha,
+    hora_creacion: hora,
+    estado: ESTADOS.PENDIENTE,
+    local_origen: datosOrden.local_origen,
+    observaciones: datosOrden.observaciones || '',
+    fecha_prestamo: '',
+    fecha_limite_devolucion: '',
+    dias_habiles_prestamo: 1,                          // por defecto 1
+    alerta_vencimiento: '',
+    nombre_receptor: datosOrden.nombre_receptor || '', // quien recibe el equipo
+    valor_total: valorTotalOrden
+  });
 
   hojaOP.appendRow(filaOrden);
 
   // Insertar detalle de cada ítem con id_detalle UUID y FK id_op UUID
+  var colDet = mapearColumnas(hojaDetalle.getRange(1, 1, 1, hojaDetalle.getLastColumn()).getValues()[0], 'Detalle_Pedido');
   for (var i = 0; i < detalleItems.length; i++) {
     var item = detalleItems[i];
     var idDetalle = generarIdUnico(); // UUID único para cada ítem
     var valorTotal = (item.cantidad || 0) * (item.valor_unitario || 0);
 
-    var filaDetalle = [
-      idDetalle,                       // id_detalle (UUID)
-      nuevoIdOP,                       // id_op (FK → Orden_Pedido, UUID)
-      item.id_producto || '',          // id_producto (FK → Productos, o vacío si texto libre)
-      item.descripcion_libre || '',    // descripcion_libre
-      item.cantidad || 0,              // cantidad
-      item.valor_unitario || 0,        // valor_unitario
-      valorTotal,                      // valor_total
-      ESTADOS.PENDIENTE,               // estado_item
-      '',                              // hora_entrega
-      ''                               // hora_regreso
-    ];
+    var filaDetalle = construirFila(colDet, {
+      id_detalle: idDetalle,
+      id_op: nuevoIdOP,                             // FK → Orden_Pedido
+      id_producto: item.id_producto || '',          // FK → Productos, o vacío si texto libre
+      descripcion_libre: item.descripcion_libre || '',
+      cantidad: item.cantidad || 0,
+      valor_unitario: item.valor_unitario || 0,
+      valor_total: valorTotal,
+      estado_item: ESTADOS.PENDIENTE,
+      hora_entrega: '',
+      hora_regreso: ''
+    });
 
     hojaDetalle.appendRow(filaDetalle);
   }
@@ -1093,24 +1384,28 @@ function obtenerOrdenes(filtros) {
     // Si solo hay encabezados, retornar vacío
     if (datosOP.length <= 1) return [];
 
+    // Ubicar columnas por nombre de encabezado en vez de por posición fija
+    var colOP = mapearColumnas(datosOP[0], 'Orden_Pedido');
+    var colDet = mapearColumnas(datosDetalle.length ? datosDetalle[0] : [], 'Detalle_Pedido');
+
     // Construir mapa de valor_total por id_op desde Detalle_Pedido
-    // Columnas: 0=id_detalle, 1=id_op, 6=valor_total
     var totalesPorOrden = {};
     for (var d = 1; d < datosDetalle.length; d++) {
-      var idOpDetalle = String(datosDetalle[d][1]);
-      var valorItem = Number(datosDetalle[d][6]) || 0;
+      var idOpDetalle = normalizarId(datosDetalle[d][colDet.id_op]);
+      if (!idOpDetalle) continue;
+      var valorItem = Number(datosDetalle[d][colDet.valor_total]) || 0;
       totalesPorOrden[idOpDetalle] = (totalesPorOrden[idOpDetalle] || 0) + valorItem;
     }
 
-    // Mapas para lookup rápido (convertir clave a string para evitar desajuste de tipos)
+    // Mapas para lookup rápido (normalizar clave para evitar desajuste de tipos)
     var mapaClientes = {};
     for (var c = 1; c < datosClientes.length; c++) {
-      mapaClientes[String(datosClientes[c][0])] = datosClientes[c][1]; // id -> nombre_local
+      mapaClientes[normalizarId(datosClientes[c][0])] = datosClientes[c][1]; // id -> nombre_local
     }
 
     var mapaUsuarios = {};
     for (var u = 1; u < datosUsuarios.length; u++) {
-      mapaUsuarios[String(datosUsuarios[u][0])] = datosUsuarios[u][1]; // id -> nombre
+      mapaUsuarios[normalizarId(datosUsuarios[u][0])] = datosUsuarios[u][1]; // id -> nombre
     }
 
     var encabezados = datosOP[0];
@@ -1120,7 +1415,8 @@ function obtenerOrdenes(filtros) {
       var fila = datosOP[i];
 
       // Saltar filas vacías (sin id_op)
-      if (!fila[0] && fila[0] !== 0) continue;
+      var idOrden = normalizarId(fila[colOP.id_op]);
+      if (!idOrden) continue;
 
       var obj = {};
       for (var j = 0; j < encabezados.length; j++) {
@@ -1128,18 +1424,38 @@ function obtenerOrdenes(filtros) {
 
         // Convertir objetos Date a string legible para evitar errores en el cliente
         if (valor instanceof Date) {
-          obj[encabezados[j]] = Utilities.formatDate(valor, 'America/Bogota', 'yyyy-MM-dd HH:mm:ss');
+          obj[normalizarEncabezado(encabezados[j])] = Utilities.formatDate(valor, 'America/Bogota', 'yyyy-MM-dd HH:mm:ss');
         } else {
-          obj[encabezados[j]] = valor;
+          obj[normalizarEncabezado(encabezados[j])] = valor;
         }
       }
 
-      // Agregar nombres legibles (usar String() para asegurar match de tipos)
-      obj.nombre_cliente = mapaClientes[String(obj.id_cliente)] || 'Desconocido';
-      obj.nombre_vendedor = mapaUsuarios[String(obj.id_vendedor)] || 'Desconocido';
+      // Asignar los campos clave desde la columna localizada por nombre.
+      // Esto garantiza que id_op siempre exista aunque el encabezado de la
+      // hoja se haya renombrado o movido: sin id_op el botón "Ver" no abre.
+      obj.id_op = idOrden;
+      obj.numero_op = formatearCelda(fila[colOP.numero_op]);
+      obj.estado = formatearCelda(fila[colOP.estado]);
+      obj.fecha = formatearCelda(fila[colOP.fecha]);
+      obj.hora_creacion = formatearCelda(fila[colOP.hora_creacion]);
+      obj.fecha_prestamo = formatearCelda(fila[colOP.fecha_prestamo]);
+      obj.fecha_limite_devolucion = formatearCelda(fila[colOP.fecha_limite_devolucion]);
+      obj.local_origen = formatearCelda(fila[colOP.local_origen]);
+      obj.observaciones = formatearCelda(fila[colOP.observaciones]);
+      obj.nombre_receptor = formatearCelda(fila[colOP.nombre_receptor]);
+      obj.id_cliente = fila[colOP.id_cliente];
+      obj.id_vendedor = fila[colOP.id_vendedor];
 
-      // Calcular valor_total desde Detalle_Pedido (fuente confiable)
-      obj.valor_total = totalesPorOrden[String(obj.id_op)] || 0;
+      // Agregar nombres legibles
+      obj.nombre_cliente = mapaClientes[normalizarId(obj.id_cliente)] || 'Desconocido';
+      obj.nombre_vendedor = mapaUsuarios[normalizarId(obj.id_vendedor)] || 'Desconocido';
+
+      // Valor de la orden: se prefiere la suma del detalle, pero si no hay
+      // filas de detalle enlazadas se conserva el valor guardado en la orden
+      // en lugar de mostrar $0.
+      var totalDetalle = totalesPorOrden[idOrden] || 0;
+      var totalGuardado = Number(fila[colOP.valor_total]) || 0;
+      obj.valor_total = totalDetalle > 0 ? totalDetalle : totalGuardado;
 
       // Aplicar filtros
       var incluir = true;
@@ -1180,22 +1496,33 @@ function obtenerDetalleOrden(idOp) {
 
     var datos = hoja.getDataRange().getValues();
     var encabezados = datos[0];
+    var col = mapearColumnas(encabezados, 'Detalle_Pedido');
+    var idBuscado = normalizarId(idOp);
     var resultado = [];
 
+    if (!idBuscado) return resultado;
+
     for (var i = 1; i < datos.length; i++) {
-      if (String(datos[i][1]) == String(idOp)) { // columna id_op (comparación segura)
-        var obj = {};
-        for (var j = 0; j < encabezados.length; j++) {
-          var valor = datos[i][j];
-          // Convertir objetos Date a string
-          if (valor instanceof Date) {
-            obj[encabezados[j]] = Utilities.formatDate(valor, 'America/Bogota', 'yyyy-MM-dd HH:mm:ss');
-          } else {
-            obj[encabezados[j]] = valor;
-          }
-        }
-        resultado.push(obj);
+      // Comparar por la columna id_op localizada por nombre y normalizada,
+      // para que el enlace no dependa de la posición ni del tipo de dato
+      if (normalizarId(datos[i][col.id_op]) !== idBuscado) continue;
+
+      var obj = {};
+      for (var j = 0; j < encabezados.length; j++) {
+        obj[normalizarEncabezado(encabezados[j])] = formatearCelda(datos[i][j]);
       }
+
+      // Asegurar los campos que usa la tabla de productos del frontend
+      obj.id_detalle = normalizarId(datos[i][col.id_detalle]);
+      obj.id_op = idBuscado;
+      obj.id_producto = formatearCelda(datos[i][col.id_producto]);
+      obj.descripcion_libre = formatearCelda(datos[i][col.descripcion_libre]);
+      obj.cantidad = Number(datos[i][col.cantidad]) || 0;
+      obj.valor_unitario = Number(datos[i][col.valor_unitario]) || 0;
+      obj.valor_total = Number(datos[i][col.valor_total]) || 0;
+      obj.estado_item = formatearCelda(datos[i][col.estado_item]);
+
+      resultado.push(obj);
     }
     return resultado;
 
@@ -1213,36 +1540,41 @@ function actualizarEstadoOrden(idOp, nuevoEstado, observaciones, nombreReceptor)
   var hojaOP = ss.getSheetByName('Orden_Pedido');
   var hojaDetalle = ss.getSheetByName('Detalle_Pedido');
   var datos = hojaOP.getDataRange().getValues();
+  var colOP = mapearColumnas(datos[0], 'Orden_Pedido');
 
   var ahora = new Date();
   var fechaHora = Utilities.formatDate(ahora, 'America/Bogota', 'yyyy-MM-dd HH:mm:ss');
   var hora = Utilities.formatDate(ahora, 'America/Bogota', 'HH:mm:ss');
+  var idBuscado = normalizarId(idOp);
+
+  if (!idBuscado) return { success: false, mensaje: 'Orden sin identificador válido' };
 
   for (var i = 1; i < datos.length; i++) {
-    if (String(datos[i][0]) === String(idOp)) {
+    if (normalizarId(datos[i][colOP.id_op]) === idBuscado) {
       var fila = i + 1; // Fila en la hoja (1-indexed)
 
-      // Actualizar estado (columna 7)
-      hojaOP.getRange(fila, 7).setValue(nuevoEstado);
+      // Actualizar estado (columna localizada por nombre)
+      hojaOP.getRange(fila, colOP.estado + 1).setValue(nuevoEstado);
 
       // Si cambia a Prestado: registrar fecha_prestamo, fecha_limite y nombre_receptor
       if (nuevoEstado === ESTADOS.PRESTADO) {
-        hojaOP.getRange(fila, 10).setValue(fechaHora); // fecha_prestamo
+        hojaOP.getRange(fila, colOP.fecha_prestamo + 1).setValue(fechaHora);
         var fechaLimite = calcularFechaLimite(ahora, 1); // 1 día hábil
         var fechaLimiteStr = Utilities.formatDate(fechaLimite, 'America/Bogota', 'yyyy-MM-dd HH:mm:ss');
-        hojaOP.getRange(fila, 11).setValue(fechaLimiteStr); // fecha_limite_devolucion
+        hojaOP.getRange(fila, colOP.fecha_limite_devolucion + 1).setValue(fechaLimiteStr);
 
-        // Guardar nombre de quien recibe el equipo (columna 14)
+        // Guardar nombre de quien recibe el equipo
         if (nombreReceptor) {
-          hojaOP.getRange(fila, 14).setValue(nombreReceptor);
+          hojaOP.getRange(fila, colOP.nombre_receptor + 1).setValue(nombreReceptor);
         }
 
         // Actualizar hora_entrega en detalle
         var datosDetalle = hojaDetalle.getDataRange().getValues();
+        var colDet = mapearColumnas(datosDetalle[0], 'Detalle_Pedido');
         for (var d = 1; d < datosDetalle.length; d++) {
-          if (String(datosDetalle[d][1]) === String(idOp)) {
-            hojaDetalle.getRange(d + 1, 9).setValue(hora); // hora_entrega
-            hojaDetalle.getRange(d + 1, 8).setValue(ESTADOS.PRESTADO); // estado_item
+          if (normalizarId(datosDetalle[d][colDet.id_op]) === idBuscado) {
+            hojaDetalle.getRange(d + 1, colDet.hora_entrega + 1).setValue(hora);
+            hojaDetalle.getRange(d + 1, colDet.estado_item + 1).setValue(ESTADOS.PRESTADO);
           }
         }
       }
@@ -1250,20 +1582,21 @@ function actualizarEstadoOrden(idOp, nuevoEstado, observaciones, nombreReceptor)
       // Si cambia a Regresado: registrar hora_regreso en detalle
       if (nuevoEstado === ESTADOS.REGRESADO) {
         var datosDetalle2 = hojaDetalle.getDataRange().getValues();
+        var colDet2 = mapearColumnas(datosDetalle2[0], 'Detalle_Pedido');
         for (var d2 = 1; d2 < datosDetalle2.length; d2++) {
-          if (String(datosDetalle2[d2][1]) === String(idOp)) {
-            hojaDetalle.getRange(d2 + 1, 10).setValue(hora); // hora_regreso
-            hojaDetalle.getRange(d2 + 1, 8).setValue(ESTADOS.REGRESADO); // estado_item
+          if (normalizarId(datosDetalle2[d2][colDet2.id_op]) === idBuscado) {
+            hojaDetalle.getRange(d2 + 1, colDet2.hora_regreso + 1).setValue(hora);
+            hojaDetalle.getRange(d2 + 1, colDet2.estado_item + 1).setValue(ESTADOS.REGRESADO);
           }
         }
       }
 
       // Agregar observaciones si las hay
       if (observaciones) {
-        var obsActuales = datos[i][8] || '';
+        var obsActuales = datos[i][colOP.observaciones] || '';
         var nuevaObs = obsActuales + (obsActuales ? ' | ' : '') +
                        '[' + fechaHora + '] ' + observaciones;
-        hojaOP.getRange(fila, 9).setValue(nuevaObs);
+        hojaOP.getRange(fila, colOP.observaciones + 1).setValue(nuevaObs);
       }
 
       return { success: true, estado: nuevoEstado };
@@ -1304,23 +1637,24 @@ function verificarVencimientos() {
   var hoja = ss.getSheetByName('Orden_Pedido');
   var datos = hoja.getDataRange().getValues();
 
+  var col = mapearColumnas(datos[0], 'Orden_Pedido');
   var ahora = new Date();
   var fechaHora = Utilities.formatDate(ahora, 'America/Bogota', 'yyyy-MM-dd HH:mm:ss');
   var cambios = 0;
 
   for (var i = 1; i < datos.length; i++) {
-    var estado = datos[i][6];
-    var fechaLimite = datos[i][10];
+    var estado = datos[i][col.estado];
+    var fechaLimite = datos[i][col.fecha_limite_devolucion];
 
     if (estado === ESTADOS.PRESTADO && fechaLimite) {
       var fechaLimiteDate = new Date(fechaLimite);
 
       if (ahora > fechaLimiteDate) {
         var fila = i + 1;
-        hoja.getRange(fila, 7).setValue(ESTADOS.POR_COBRAR); // estado
-        hoja.getRange(fila, 13).setValue(fechaHora);          // alerta_vencimiento
+        hoja.getRange(fila, col.estado + 1).setValue(ESTADOS.POR_COBRAR);
+        hoja.getRange(fila, col.alerta_vencimiento + 1).setValue(fechaHora);
         cambios++;
-        Logger.log('Orden ' + datos[i][1] + ' cambió a Por Cobrar/Devolver');
+        Logger.log('Orden ' + datos[i][col.numero_op] + ' cambió a Por Cobrar/Devolver');
       }
     }
   }
@@ -1463,8 +1797,11 @@ function obtenerContadores() {
     Regresado: 0
   };
 
+  if (datos.length <= 1) return contadores;
+  var col = mapearColumnas(datos[0], 'Orden_Pedido');
+
   for (var i = 1; i < datos.length; i++) {
-    var estado = datos[i][6];
+    var estado = datos[i][col.estado];
     if (contadores.hasOwnProperty(estado)) {
       contadores[estado]++;
     }
@@ -1515,6 +1852,8 @@ function generarReporteExcel(filtros) {
     var detalle = obtenerDetalleOrden(o.id_op);
     var descProductos = detalle.map(function(d) { return d.descripcion_libre; }).join(', ');
     var valorTotal = detalle.reduce(function(sum, d) { return sum + (d.valor_total || 0); }, 0);
+    // Si el detalle no está enlazado, usar el valor ya calculado en la orden
+    if (valorTotal === 0) valorTotal = Number(o.valor_total) || 0;
 
     var filaData = [
       o.numero_op, o.fecha, o.nombre_cliente, o.local_origen, o.nombre_vendedor,

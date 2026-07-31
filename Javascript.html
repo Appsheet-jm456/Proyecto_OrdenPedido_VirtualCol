@@ -546,31 +546,45 @@ function obtenerClaseBadge(estado) {
 }
 
 function formatearNumero(num) {
-  return Number(num).toLocaleString('es-CO');
+  var n = Number(num);
+  if (!isFinite(n)) n = 0; // evita mostrar "NaN" si la celda viene vacía
+  return n.toLocaleString('es-CO');
 }
 
 // Formatear como moneda colombiana (COP sin decimales)
 function formatearMoneda(valor) {
+  var numero = Number(valor);
+  if (!isFinite(numero)) numero = 0;
   return new Intl.NumberFormat('es-CO', {
     style: 'currency',
     currency: 'COP',
     minimumFractionDigits: 0,
     maximumFractionDigits: 0
-  }).format(valor);
+  }).format(numero);
 }
 
 // ==================== VER / GESTIONAR ORDEN ====================
 function verOrden(idOp) {
-  // Buscar orden en cache
+  // Buscar orden en cache comparando siempre como texto, para que un id
+  // guardado como número en la hoja también coincida
   var orden = null;
+  var idBuscado = String(idOp == null ? '' : idOp).trim().toUpperCase();
+
   for (var i = 0; i < ordenesCache.length; i++) {
-    if (ordenesCache[i].id_op == idOp) {
+    var idCache = String(ordenesCache[i].id_op == null ? '' : ordenesCache[i].id_op).trim().toUpperCase();
+    if (idCache && idCache === idBuscado) {
       orden = ordenesCache[i];
       break;
     }
   }
 
-  if (!orden) return;
+  // Antes esto retornaba en silencio y el botón "Ver" parecía no funcionar
+  if (!orden) {
+    console.error('[verOrden] No se encontró la orden con id_op:', idOp);
+    mostrarNotificacion('No se pudo abrir la orden: falta el identificador (id_op) en la hoja de cálculo.', 'error');
+    return;
+  }
+
   ordenSeleccionada = orden;
 
   // Llenar datos de la página de ver/gestionar
@@ -596,15 +610,28 @@ function verOrden(idOp) {
   badgeEstado.textContent = orden.estado;
   badgeEstado.className = 'badge ' + obtenerClaseBadge(orden.estado);
 
-  // Cargar detalle de productos
+  // Cargar detalle de productos.
+  // Sin withFailureHandler un error del servidor dejaba la tabla vacía
+  // sin ningún mensaje visible.
+  document.getElementById('tbody-detalle-orden').innerHTML =
+    '<tr><td colspan="6" class="sin-datos">Cargando productos…</td></tr>';
+
   google.script.run
     .withSuccessHandler(function(detalle) {
       renderizarDetalleOrden(detalle);
     })
-    .obtenerDetalleOrden(idOp);
+    .withFailureHandler(function(error) {
+      console.error('[verOrden] Error al cargar el detalle:', error);
+      detalleOrdenActual = [];
+      document.getElementById('tbody-detalle-orden').innerHTML =
+        '<tr><td colspan="6" class="sin-datos">Error al cargar productos: ' + error.message + '</td></tr>';
+      document.getElementById('ver-total-orden').innerHTML =
+        '<strong>$' + formatearNumero(orden.valor_total || 0) + '</strong>';
+    })
+    .obtenerDetalleOrden(orden.id_op);
 
   // Generar botones de transición según estado
-  generarBotonesTransicion(orden.estado, idOp);
+  generarBotonesTransicion(orden.estado, orden.id_op);
 
   // Navegar a la página de ver/gestionar (reemplaza apertura de modal)
   mostrarModulo('ver-orden');
@@ -616,14 +643,19 @@ function renderizarDetalleOrden(detalle) {
   var tbody = document.getElementById('tbody-detalle-orden');
   var totalOrden = 0;
 
-  if (detalle.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" class="sin-datos">Sin productos</td></tr>';
+  if (detalleOrdenActual.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="sin-datos">Sin productos registrados para esta orden</td></tr>';
+    // Antes se retornaba sin actualizar el total y quedaba el valor de la
+    // orden anterior en pantalla. Se muestra el valor guardado en la orden.
+    var valorGuardado = (ordenSeleccionada && ordenSeleccionada.valor_total) || 0;
+    document.getElementById('ver-total-orden').innerHTML =
+      '<strong>$' + formatearNumero(valorGuardado) + '</strong>';
     return;
   }
 
   var html = '';
-  for (var i = 0; i < detalle.length; i++) {
-    var d = detalle[i];
+  for (var i = 0; i < detalleOrdenActual.length; i++) {
+    var d = detalleOrdenActual[i];
     totalOrden += d.valor_total || 0;
     var badgeItem = obtenerClaseBadge(d.estado_item);
 
@@ -1879,10 +1911,14 @@ function imprimirRemision() {
   var orden = ordenSeleccionada;
   var detalle = detalleOrdenActual;
 
-  // Calcular total general
+  // Calcular total general. Si la orden no tiene detalle enlazado se usa
+  // el valor guardado en la orden para no imprimir la remisión en $0.
   var totalGeneral = 0;
   for (var i = 0; i < detalle.length; i++) {
     totalGeneral += detalle[i].valor_total || 0;
+  }
+  if (totalGeneral === 0) {
+    totalGeneral = Number(orden.valor_total) || 0;
   }
 
   // Fecha y hora de impresión
