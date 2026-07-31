@@ -1,1 +1,975 @@
 
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <?!= include('CSS'); ?>
+</head>
+<body>
+
+  <!-- ==================== LOGIN ==================== -->
+  <div id="pantalla-login" class="login-container">
+    <div class="login-card">
+      <!-- Spinner de carga inicial -->
+      <div id="login-loading" class="login-loading">
+        <div class="spinner"></div>
+        <p>Cargando...</p>
+      </div>
+      <!-- Contenido del login (oculto hasta cargar config) -->
+      <div id="login-contenido" style="display:none;">
+        <div class="login-logo">
+          <img id="login-logo-img" src="" alt="Logo" class="login-logo-img" style="display:none;">
+          <h1 id="login-nombre-comercial">Ventas Virtuales<br>Colombia</h1>
+          <p id="login-ciudad" class="login-ciudad">Cali, Colombia</p>
+          <hr class="login-separador">
+          <p class="login-subtitulo">Sistema de Órdenes de Pedido</p>
+        </div>
+        <form id="form-login" onsubmit="return false;">
+          <div class="campo-form">
+            <label for="login-email">Correo electrónico</label>
+            <input type="email" id="login-email" placeholder="correo@ejemplo.com" required>
+          </div>
+          <div class="campo-form">
+            <label for="login-password">Contraseña</label>
+            <input type="password" id="login-password" placeholder="••••••••" required>
+          </div>
+          <div id="login-error" class="mensaje-error" style="display:none;"></div>
+          <button type="submit" class="btn-principal" onclick="iniciarSesion()">Ingresar</button>
+        </form>
+        <p id="login-footer" class="login-footer">Av 5 a # 23 D Norte - 66<br>Ctro Comercial Pasarela Local 2 - 107<br>Cel: 3175591252</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== DASHBOARD ==================== -->
+  <div id="pantalla-dashboard" style="display:none;">
+    <div id="app-wrapper">
+
+      <!-- Overlay oscuro para sidebar en mobile -->
+      <div id="overlay-sidebar" onclick="cerrarSidebarMobile()"></div>
+
+      <!-- Botón hamburger para mobile -->
+      <button id="btn-menu-mobile" onclick="abrirSidebarMobile()">
+        <span class="material-icons">menu</span>
+      </button>
+
+      <!-- SIDEBAR IZQUIERDO COLAPSABLE -->
+      <aside id="sidebar" class="sidebar-expandido">
+        <!-- Header del sidebar: logo + botón colapsar -->
+        <div class="sidebar-header">
+          <div class="sidebar-logo">
+            <img id="sidebar-logo-img" src="" alt="VVC" class="logo-img" style="display:none;">
+            <span class="sidebar-titulo" id="sidebar-nombre-comercial">Ventas Virtuales</span>
+          </div>
+          <button id="btn-colapsar" onclick="toggleSidebar()" title="Colapsar menú">
+            <span class="material-icons">menu</span>
+          </button>
+        </div>
+
+        <!-- Info del usuario logueado -->
+        <div class="sidebar-usuario">
+          <div class="avatar-circulo" id="sidebar-avatar">VV</div>
+          <div class="sidebar-usuario-info">
+            <span class="usuario-nombre" id="sidebar-usuario-nombre"></span>
+            <span class="usuario-rol" id="sidebar-usuario-rol"></span>
+          </div>
+        </div>
+
+        <!-- Navegación principal -->
+        <nav class="sidebar-nav">
+          <a class="nav-item activo" onclick="mostrarModulo('ordenes')" data-modulo="ordenes" title="Órdenes de Pedido">
+            <span class="nav-icono material-icons">receipt_long</span>
+            <span class="nav-texto">Órdenes de Pedido</span>
+          </a>
+          <a class="nav-item" onclick="mostrarModulo('clientes')" data-modulo="clientes" title="Clientes">
+            <span class="nav-icono material-icons">groups</span>
+            <span class="nav-texto">Clientes</span>
+          </a>
+          <a class="nav-item" onclick="mostrarModulo('productos')" data-modulo="productos" title="Productos" id="nav-productos" style="display:none;">
+            <span class="nav-icono material-icons">inventory_2</span>
+            <span class="nav-texto">Productos</span>
+          </a>
+          <a class="nav-item" onclick="mostrarModulo('usuarios')" data-modulo="usuarios" title="Usuarios" id="nav-usuarios" style="display:none;">
+            <span class="nav-icono material-icons">person</span>
+            <span class="nav-texto">Usuarios</span>
+          </a>
+          <a class="nav-item" onclick="mostrarModulo('reportes')" data-modulo="reportes" title="Reportes" id="nav-reportes" style="display:none;">
+            <span class="nav-icono material-icons">assessment</span>
+            <span class="nav-texto">Reportes</span>
+          </a>
+          <a class="nav-item" onclick="mostrarModulo('configuracion')" data-modulo="configuracion" title="Configuración" id="nav-configuracion" style="display:none;">
+            <span class="nav-icono material-icons">settings</span>
+            <span class="nav-texto">Configuración</span>
+          </a>
+        </nav>
+
+        <!-- Pie del sidebar: cerrar sesión -->
+        <div class="sidebar-footer">
+          <a class="nav-item nav-logout" onclick="cerrarSesion()" title="Cerrar sesión">
+            <span class="nav-icono material-icons">logout</span>
+            <span class="nav-texto">Cerrar sesión</span>
+          </a>
+        </div>
+      </aside>
+
+      <!-- ÁREA DE CONTENIDO PRINCIPAL -->
+      <main id="contenido-principal">
+        <!-- HEADER TOP BAR del contenido -->
+        <div class="topbar">
+          <h2 class="topbar-titulo" id="titulo-modulo">Órdenes de Pedido</h2>
+          <button class="btn-nueva-orden" onclick="mostrarPaginaNuevaOrden()" id="btn-nueva-orden-topbar">
+            <span class="material-icons">add</span> Nueva Orden
+          </button>
+        </div>
+
+        <!-- MÓDULO: ÓRDENES DE PEDIDO -->
+        <div id="modulo-ordenes" class="modulo">
+          <!-- CONTADORES DE ESTADO (chips horizontales) -->
+          <div class="contadores-estado-barra">
+            <div class="contador-chip naranja" onclick="filtrarPorEstadoChip('Pendiente')" id="chip-pendiente">
+              <span class="chip-numero" id="count-pendiente">0</span>
+              <span class="chip-label">Pendiente</span>
+            </div>
+            <div class="contador-chip verde" onclick="filtrarPorEstadoChip('Prestado')" id="chip-prestado">
+              <span class="chip-numero" id="count-prestado">0</span>
+              <span class="chip-label">Prestado</span>
+            </div>
+            <div class="contador-chip rojo" onclick="filtrarPorEstadoChip('Por Cobrar/Devolver')" id="chip-cobrar">
+              <span class="chip-numero" id="count-cobrar">0</span>
+              <span class="chip-label">Por Cobrar/Dev.</span>
+            </div>
+            <div class="contador-chip azul" onclick="filtrarPorEstadoChip('Facturado')" id="chip-facturado">
+              <span class="chip-numero" id="count-facturado">0</span>
+              <span class="chip-label">Facturado</span>
+            </div>
+            <div class="contador-chip gris" onclick="filtrarPorEstadoChip('Regresado')" id="chip-regresado">
+              <span class="chip-numero" id="count-regresado">0</span>
+              <span class="chip-label">Regresado</span>
+            </div>
+            <div class="contador-chip todos activo-chip" onclick="filtrarPorEstadoChip('Todos')" id="chip-todos">
+              <span class="chip-label">Ver todos</span>
+            </div>
+          </div>
+
+          <!-- Barra de filtros dinámicos -->
+          <div class="filtros-ordenes">
+            <div class="filtros-ordenes-grid">
+              <div class="campo-filtro">
+                <label>N° OP</label>
+                <input type="text" id="filtro-op-numero" placeholder="Ej: OP-2025" oninput="aplicarFiltrosOrdenes()">
+              </div>
+              <div class="campo-filtro">
+                <label>Cliente / Local</label>
+                <input type="text" id="filtro-op-cliente" placeholder="Buscar cliente..." oninput="aplicarFiltrosOrdenes()">
+              </div>
+              <div class="campo-filtro">
+                <label>Estado</label>
+                <select id="filtro-op-estado" onchange="aplicarFiltrosOrdenes()">
+                  <option value="">Todos</option>
+                  <option value="Pendiente">Pendiente</option>
+                  <option value="Prestado">Prestado</option>
+                  <option value="Por Cobrar/Devolver">Por Cobrar/Devolver</option>
+                  <option value="Facturado">Facturado</option>
+                  <option value="Regresado">Regresado</option>
+                </select>
+              </div>
+              <div class="campo-filtro">
+                <label>Fecha desde</label>
+                <input type="date" id="filtro-op-fecha-desde" onchange="aplicarFiltrosOrdenes()">
+              </div>
+              <div class="campo-filtro">
+                <label>Fecha hasta</label>
+                <input type="date" id="filtro-op-fecha-hasta" onchange="aplicarFiltrosOrdenes()">
+              </div>
+              <div class="campo-filtro campo-filtro-btn">
+                <button class="btn-limpiar-filtros" onclick="limpiarFiltrosOrdenes()">
+                  <span class="material-icons" style="font-size:16px;">filter_alt_off</span> Limpiar
+                </button>
+              </div>
+            </div>
+            <p id="conteo-ordenes" class="conteo-ordenes"></p>
+          </div>
+
+          <div id="tabla-ordenes-container">
+            <table class="tabla-principal" id="tabla-ordenes">
+              <thead>
+                <tr>
+                  <th>N° OP</th>
+                  <th>Fecha</th>
+                  <th>Cliente</th>
+                  <th>Vendedor / Receptor</th>
+                  <th>Valor</th>
+                  <th>Hora</th>
+                  <th>Estado</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-ordenes">
+                <tr><td colspan="8" class="sin-datos">Cargando órdenes...</td></tr>
+              </tbody>
+            </table>
+            <!-- Cards mobile: se muestran solo en < 768px -->
+            <div id="cards-ordenes-mobile" class="cards-mobile"></div>
+          </div>
+        </div>
+
+        <!-- MÓDULO: CLIENTES -->
+        <div id="modulo-clientes" class="modulo oculto">
+          <div class="seccion-header">
+            <input type="text" id="buscar-cliente" placeholder="Buscar cliente..." class="input-busqueda" oninput="buscarClientes()">
+            <button class="btn-nueva-orden" onclick="abrirModalNuevoCliente()">
+              <span class="material-icons">add</span> Nuevo Cliente
+            </button>
+          </div>
+          <table class="tabla-principal" id="tabla-clientes">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Nombre Local</th>
+                <th>Contacto</th>
+                <th>Teléfono</th>
+                <th>Ciudad</th>
+                <th class="col-acciones-admin" style="display:none;">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-clientes">
+              <tr><td colspan="6" class="sin-datos">Cargando clientes...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- MÓDULO: PRODUCTOS (Super admin y Auxiliar) -->
+        <div id="modulo-productos" class="modulo oculto">
+          <div class="seccion-header">
+            <input type="text" id="buscar-producto" placeholder="Buscar por nombre o categoría..." class="input-busqueda" oninput="buscarProductos()">
+            <button class="btn-nueva-orden" onclick="abrirModalNuevoProducto()">
+              <span class="material-icons">add</span> Nuevo Producto
+            </button>
+          </div>
+          <table class="tabla-principal" id="tabla-productos">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Categoría</th>
+                <th>Descripción</th>
+                <th>Precio ref.</th>
+                <th>Activo</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-productos">
+              <tr><td colspan="6" class="sin-datos">Cargando productos...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- MÓDULO: USUARIOS (solo Super admin) -->
+        <div id="modulo-usuarios" class="modulo oculto">
+          <div class="seccion-header">
+            <h3>Gestión de Usuarios</h3>
+            <button class="btn-nueva-orden" onclick="abrirModalNuevoUsuario()">
+              <span class="material-icons">add</span> Nuevo Usuario
+            </button>
+          </div>
+          <table class="tabla-principal" id="tabla-usuarios">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Email</th>
+                <th>Rol</th>
+                <th>Local</th>
+                <th>Activo</th>
+                <th class="col-acciones-admin" style="display:none;">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-usuarios">
+              <tr><td colspan="7" class="sin-datos">Cargando usuarios...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- MÓDULO: REPORTES (Super admin y Auxiliar) -->
+        <div id="modulo-reportes" class="modulo oculto">
+          <div class="reportes-filtros">
+            <h3>Generar Reporte Excel</h3>
+            <div class="filtros-grid">
+              <div class="campo-form">
+                <label>Fecha inicio</label>
+                <input type="date" id="filtro-fecha-inicio">
+              </div>
+              <div class="campo-form">
+                <label>Fecha fin</label>
+                <input type="date" id="filtro-fecha-fin">
+              </div>
+              <div class="campo-form">
+                <label>Estado</label>
+                <select id="filtro-estado-reporte">
+                  <option value="">Todos</option>
+                  <option value="Pendiente">Pendiente</option>
+                  <option value="Prestado">Prestado</option>
+                  <option value="Por Cobrar/Devolver">Por Cobrar/Devolver</option>
+                  <option value="Facturado">Facturado</option>
+                  <option value="Regresado">Regresado</option>
+                </select>
+              </div>
+              <div class="campo-form">
+                <label>Vendedor</label>
+                <select id="filtro-vendedor">
+                  <option value="">Todos</option>
+                </select>
+              </div>
+              <div class="campo-form">
+                <label>Cliente / Local</label>
+                <input type="text" id="filtro-cliente-reporte" placeholder="Buscar cliente...">
+              </div>
+            </div>
+            <div class="reportes-botones">
+              <button class="btn-nueva-orden" onclick="filtrarReporte()">
+                <span class="material-icons">search</span> Filtrar
+              </button>
+              <button class="btn-limpiar-filtros" onclick="limpiarFiltrosReporte()">
+                <span class="material-icons" style="font-size:16px;">filter_alt_off</span> Limpiar
+              </button>
+              <button class="btn-nueva-orden" onclick="descargarExcel()">
+                <span class="material-icons">download</span> Descargar Excel
+              </button>
+            </div>
+          </div>
+          <div id="preview-reporte">
+            <p id="conteo-reporte" class="conteo-registros"></p>
+            <div style="overflow-x:auto;">
+              <table class="tabla-principal" id="tabla-reporte">
+                <thead>
+                  <tr>
+                    <th>N° OP</th>
+                    <th>Fecha</th>
+                    <th>Cliente</th>
+                    <th>Local origen</th>
+                    <th>Vendedor</th>
+                    <th>Recibe</th>
+                    <th>Valor total</th>
+                    <th>Hora</th>
+                    <th>Fecha límite</th>
+                    <th>Estado</th>
+                    <th>Observaciones</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-reporte">
+                  <tr><td colspan="11" class="sin-datos">Haga clic en "Filtrar" para previsualizar órdenes</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- MÓDULO: NUEVA ORDEN (página completa — reemplaza modal) -->
+        <div id="modulo-nueva-orden" class="modulo oculto">
+          <!-- Breadcrumb de navegación -->
+          <div class="breadcrumb no-print">
+            <span class="breadcrumb-link" onclick="regresarAOrdenes()">
+              <span class="material-icons breadcrumb-icon">receipt_long</span>Órdenes de Pedido
+            </span>
+            <span class="material-icons breadcrumb-sep">chevron_right</span>
+            <span class="breadcrumb-actual">Nueva Orden</span>
+          </div>
+
+          <!-- Página de documento estilo contable -->
+          <div class="pagina-documento">
+
+            <!-- Encabezado del documento: N° OP, fecha, cliente, local -->
+            <div class="doc-seccion">
+              <div class="doc-encabezado-grid">
+                <div class="campo-doc-readonly">
+                  <label class="doc-label">N° OP</label>
+                  <div class="doc-valor-readonly">Se asignará al guardar</div>
+                </div>
+                <div class="campo-form">
+                  <label class="doc-label">Fecha</label>
+                  <input type="date" id="nueva-orden-fecha" class="config-input">
+                </div>
+                <div class="campo-form">
+                  <label>Cliente / Local *</label>
+                  <input type="text" id="nueva-orden-cliente" placeholder="Buscar cliente..." list="lista-clientes" oninput="buscarClienteAutocomplete()" autocomplete="off">
+                  <datalist id="lista-clientes"></datalist>
+                  <input type="hidden" id="nueva-orden-id-cliente">
+                  <!-- Enlace para crear cliente nuevo inline -->
+                  <a href="javascript:void(0)" id="btn-toggle-nuevo-cliente" class="enlace-nuevo-cliente" onclick="toggleFormNuevoClienteInline()">
+                    <span class="material-icons" style="font-size:16px; vertical-align:middle;">add</span> Crear nuevo cliente
+                  </a>
+                  <!-- Mini-formulario inline para crear cliente -->
+                  <div id="form-nuevo-cliente-inline" class="form-cliente-inline" style="display:none;">
+                    <div class="form-cliente-inline-grid">
+                      <div class="campo-form">
+                        <label>Nombre del local *</label>
+                        <input type="text" id="inline-cliente-nombre" placeholder="Nombre del local">
+                      </div>
+                      <div class="campo-form">
+                        <label>Contacto</label>
+                        <input type="text" id="inline-cliente-contacto" placeholder="Persona de contacto">
+                      </div>
+                      <div class="campo-form">
+                        <label>Teléfono</label>
+                        <input type="tel" id="inline-cliente-telefono" placeholder="Teléfono">
+                      </div>
+                      <div class="campo-form">
+                        <label>Ciudad</label>
+                        <input type="text" id="inline-cliente-ciudad" placeholder="Ciudad" value="Cali">
+                      </div>
+                    </div>
+                    <div class="form-cliente-inline-acciones">
+                      <button type="button" class="btn-guardar-cliente-inline" onclick="guardarClienteInline()">
+                        <span class="material-icons" style="font-size:16px; vertical-align:middle;">save</span> Guardar cliente
+                      </button>
+                      <button type="button" class="btn-cancelar-cliente-inline" onclick="toggleFormNuevoClienteInline()">Cancelar</button>
+                    </div>
+                    <div id="inline-cliente-mensaje" class="inline-cliente-mensaje" style="display:none;"></div>
+                  </div>
+                </div>
+                <div class="campo-form">
+                  <label>Local de origen</label>
+                  <input type="text" id="nueva-orden-local" placeholder="Local de origen">
+                </div>
+              </div>
+            </div>
+
+            <!-- Tabla de detalle de productos -->
+            <div class="doc-seccion">
+              <h4 class="doc-seccion-titulo">Detalle de Productos</h4>
+
+              <!-- Buscador de productos + formulario inline de nuevo producto -->
+              <div class="items-agregar">
+                <div class="campo-form" style="margin-bottom:8px; position:relative;">
+                  <input type="text" id="item-buscar-producto" placeholder="Buscar producto existente..." oninput="buscarProductoAutocomplete()" autocomplete="off">
+                  <div id="dropdown-productos" class="dropdown-autocomplete" style="display:none;"></div>
+                </div>
+                <a href="javascript:void(0)" id="btn-toggle-nuevo-producto-inline" class="enlace-nuevo-cliente" onclick="toggleFormNuevoProductoInline()" style="margin-bottom:10px; display:inline-flex;">
+                  <span class="material-icons" style="font-size:16px; vertical-align:middle;">add</span> Crear nuevo producto
+                </a>
+                <!-- Mini-formulario inline para crear producto -->
+                <div id="form-nuevo-producto-inline" class="form-cliente-inline" style="display:none;">
+                  <div class="form-cliente-inline-grid">
+                    <div class="campo-form">
+                      <label>Nombre del producto *</label>
+                      <input type="text" id="inline-producto-nombre" placeholder="Nombre del producto">
+                    </div>
+                    <div class="campo-form">
+                      <label>Categoría</label>
+                      <input type="text" id="inline-producto-categoria" placeholder="Ej: Torre, Tiny PC">
+                    </div>
+                    <div class="campo-form">
+                      <label>Precio referencia</label>
+                      <input type="number" id="inline-producto-precio" placeholder="0" min="0">
+                    </div>
+                  </div>
+                  <div class="form-cliente-inline-acciones">
+                    <button type="button" class="btn-guardar-cliente-inline" id="btn-guardar-producto-inline" onclick="guardarProductoInline()">
+                      <span class="material-icons" style="font-size:16px; vertical-align:middle;">save</span> Guardar producto
+                    </button>
+                    <button type="button" class="btn-cancelar-cliente-inline" onclick="toggleFormNuevoProductoInline()">Cancelar</button>
+                  </div>
+                  <div id="inline-producto-mensaje" class="inline-cliente-mensaje" style="display:none;"></div>
+                </div>
+                <!-- Campos para agregar ítem a la tabla -->
+                <div class="form-grid form-grid-items" style="margin-top:10px;">
+                  <input type="text" id="item-descripcion" placeholder="Descripción del producto">
+                  <input type="number" id="item-cantidad" placeholder="Cant" min="1" value="1">
+                  <input type="number" id="item-valor" placeholder="Valor unitario" min="0">
+                  <button class="btn-agregar-item" onclick="agregarItem()" title="Agregar ítem">
+                    <span class="material-icons">add_circle</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Tabla editable de ítems -->
+              <div style="overflow-x:auto;">
+                <table class="tabla-items" id="tabla-items">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Producto / Descripción</th>
+                      <th>Cant</th>
+                      <th>Valor Unit.</th>
+                      <th>Valor Total</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-items"></tbody>
+                  <tfoot>
+                    <tr>
+                      <td colspan="4" class="texto-derecha"><strong>TOTAL:</strong></td>
+                      <td id="total-items"><strong>$0</strong></td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+
+            <!-- Sección inferior: receptor y observaciones -->
+            <div class="doc-seccion">
+              <div class="form-grid">
+                <div class="campo-form">
+                  <label>Entregado a / Recibe</label>
+                  <input type="text" id="nueva-orden-receptor" placeholder="Nombre de quien recibe el equipo (opcional)">
+                </div>
+                <div class="campo-form">
+                  <label>Observaciones</label>
+                  <textarea id="nueva-orden-observaciones" rows="3" placeholder="Observaciones opcionales..."></textarea>
+                </div>
+              </div>
+            </div>
+
+            <!-- Botones de acción -->
+            <div class="doc-footer-acciones no-print">
+              <button class="btn-secundario btn-doc-cancelar" onclick="cancelarNuevaOrden()">
+                <span class="material-icons" style="font-size:16px; vertical-align:middle;">close</span> Cancelar
+              </button>
+              <button class="btn-principal btn-doc-guardar" onclick="guardarNuevaOrden()">
+                <span class="material-icons" style="font-size:16px; vertical-align:middle;">save</span> Guardar Orden
+              </button>
+            </div>
+
+          </div><!-- fin .pagina-documento -->
+        </div><!-- fin #modulo-nueva-orden -->
+
+        <!-- MÓDULO: VER / GESTIONAR ORDEN (página completa — reemplaza modal) -->
+        <div id="modulo-ver-orden" class="modulo oculto">
+          <!-- Encabezado de impresión PDF (oculto en pantalla) -->
+          <div class="print-header">
+            <img id="print-logo-img" src="" alt="Logo" class="print-logo-img">
+            <h1 id="print-nombre-comercial">Ventas Virtuales Colombia</h1>
+            <p id="print-direccion">Av 5 a # 23 D Norte - 66 Ctro Comercial Pasarela Local 2 - 107</p>
+            <p id="print-contacto">Cel: 3175591252 | rafyta1995@gmail.com</p>
+          </div>
+
+          <!-- Breadcrumb de navegación -->
+          <div class="breadcrumb no-print">
+            <span class="breadcrumb-link" onclick="regresarAOrdenes()">
+              <span class="material-icons breadcrumb-icon">receipt_long</span>Órdenes de Pedido
+            </span>
+            <span class="material-icons breadcrumb-sep">chevron_right</span>
+            <span class="breadcrumb-actual" id="ver-breadcrumb-op">Ver Orden</span>
+          </div>
+
+          <!-- Página de documento estilo contable -->
+          <div class="pagina-documento">
+
+            <!-- Datos de la orden (solo lectura) -->
+            <div class="doc-seccion">
+              <div class="doc-encabezado-grid">
+                <div class="campo-doc-readonly">
+                  <label class="doc-label">N° OP</label>
+                  <div class="doc-valor-readonly" id="ver-numero-op"></div>
+                </div>
+                <div class="campo-doc-readonly">
+                  <label class="doc-label">Fecha creación</label>
+                  <div class="doc-valor-readonly" id="ver-fecha"></div>
+                </div>
+                <div class="campo-doc-readonly">
+                  <label class="doc-label">Fecha préstamo</label>
+                  <div class="doc-valor-readonly" id="ver-fecha-prestamo"></div>
+                </div>
+                <div class="campo-doc-readonly">
+                  <label class="doc-label">Fecha límite</label>
+                  <div class="doc-valor-readonly texto-rojo" id="ver-fecha-limite"></div>
+                </div>
+                <div class="campo-doc-readonly">
+                  <label class="doc-label">Cliente / Local</label>
+                  <div class="doc-valor-readonly" id="ver-cliente"></div>
+                </div>
+                <div class="campo-doc-readonly">
+                  <label class="doc-label">Vendedor</label>
+                  <div class="doc-valor-readonly" id="ver-vendedor"></div>
+                </div>
+                <div class="campo-doc-readonly">
+                  <label class="doc-label">Local origen</label>
+                  <div class="doc-valor-readonly" id="ver-local"></div>
+                </div>
+                <div class="campo-doc-readonly">
+                  <label class="doc-label">Recibe equipo</label>
+                  <div class="doc-valor-readonly" id="ver-receptor"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tabla detalle de la orden -->
+            <div class="doc-seccion">
+              <div style="overflow-x:auto;">
+                <table class="tabla-principal tabla-detalle-orden">
+                  <thead>
+                    <tr>
+                      <th>Producto</th>
+                      <th>Descripción</th>
+                      <th>Cant</th>
+                      <th>Valor unit.</th>
+                      <th>Valor total</th>
+                      <th>Estado ítem</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-detalle-orden"></tbody>
+                  <tfoot>
+                    <tr>
+                      <td colspan="4" class="texto-derecha"><strong>TOTAL:</strong></td>
+                      <td id="ver-total-orden"><strong>$0</strong></td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              <div class="ver-observaciones" style="margin-top:16px;">
+                <strong>Observaciones:</strong> <span id="ver-observaciones"></span>
+              </div>
+            </div>
+
+            <!-- Sección de cambio de estado (oculta al imprimir) -->
+            <div class="doc-seccion seccion-cambio-estado no-print">
+              <h4>Actualizar estado de la orden</h4>
+              <div class="estado-actual-container">
+                <span>Estado actual:</span>
+                <span id="ver-estado-badge" class="badge"></span>
+              </div>
+              <!-- Campo receptor: visible solo al marcar como Prestado -->
+              <div id="campo-receptor-prestado" class="campo-form" style="display:none;">
+                <label>Nombre de quien recibe el equipo *</label>
+                <input type="text" id="ver-nombre-receptor" placeholder="Nombre completo de quien recibe">
+                <small style="color:#888;">Obligatorio para marcar como Prestado</small>
+              </div>
+              <div id="botones-transicion" class="botones-transicion"></div>
+              <div class="campo-form">
+                <label>Observaciones adicionales (opcional)</label>
+                <textarea id="ver-observaciones-cambio" rows="2" placeholder="Agregar nota al cambio de estado..."></textarea>
+              </div>
+            </div>
+
+            <!-- Botones de acción (ocultos al imprimir) -->
+            <div class="doc-footer-acciones no-print">
+              <button class="btn-secundario btn-doc-cancelar" onclick="regresarAOrdenes()">
+                <span class="material-icons" style="font-size:16px; vertical-align:middle;">arrow_back</span> Volver
+              </button>
+              <button class="btn-imprimir" onclick="imprimirRemision()">
+                <span class="material-icons">print</span> Imprimir PDF
+              </button>
+            </div>
+
+          </div><!-- fin .pagina-documento -->
+
+          <!-- Pie de página para impresión PDF (oculto en pantalla) -->
+          <div class="print-footer">
+            <p id="print-footer-fecha"></p>
+            <p id="print-footer-estado"></p>
+          </div>
+        </div><!-- fin #modulo-ver-orden -->
+
+        <!-- MÓDULO: CONFIGURACIÓN (solo Super admin) -->
+        <div id="modulo-configuracion" class="modulo oculto">
+
+          <!-- Barra de tabs de configuración -->
+          <div class="config-tabs">
+            <button class="config-tab config-tab-activo" data-config-tab="negocio" onclick="cambiarTabConfig('negocio')">
+              <span class="material-icons" style="font-size:18px; vertical-align:middle; margin-right:4px;">store</span> Datos del Negocio
+            </button>
+            <button class="config-tab" data-config-tab="consecutivos" onclick="cambiarTabConfig('consecutivos')">
+              <span class="material-icons" style="font-size:18px; vertical-align:middle; margin-right:4px;">confirmation_number</span> Consecutivos
+            </button>
+          </div>
+
+          <!-- Tab: Datos del Negocio -->
+          <div id="config-panel-negocio" class="config-panel">
+            <div class="config-form-container">
+              <div class="config-form-grid">
+                <div class="campo-form">
+                  <label>Nombre comercial</label>
+                  <input type="text" id="cfg-nombre-comercial" placeholder="Nombre del negocio">
+                </div>
+                <div class="campo-form">
+                  <label>Nombre jurídico</label>
+                  <input type="text" id="cfg-nombre-juridico" placeholder="Razón social o persona jurídica">
+                </div>
+                <div class="campo-form campo-form-full">
+                  <label>Dirección</label>
+                  <input type="text" id="cfg-direccion" placeholder="Dirección física del negocio">
+                </div>
+                <div class="campo-form">
+                  <label>Correo</label>
+                  <input type="email" id="cfg-correo" placeholder="correo@ejemplo.com">
+                </div>
+                <div class="campo-form">
+                  <label>Celular</label>
+                  <input type="text" id="cfg-celular" placeholder="Número de celular">
+                </div>
+                <div class="campo-form">
+                  <label>Ciudad</label>
+                  <input type="text" id="cfg-ciudad" placeholder="Ciudad del negocio">
+                </div>
+                <div class="campo-form">
+                  <label>Logo URL</label>
+                  <input type="text" id="cfg-logo-url" placeholder="https://..." oninput="previewLogoCfgForm()">
+                  <img id="cfg-logo-preview" class="config-logo-preview-form" src="" alt="Preview logo" style="display:none;">
+                </div>
+              </div>
+              <div class="config-acciones">
+                <button class="btn-principal" id="btn-guardar-config" onclick="guardarConfiguracion()" style="width:auto; padding:12px 28px;">
+                  <span class="material-icons" style="font-size:16px; vertical-align:middle;">save</span> Guardar cambios
+                </button>
+                <span id="config-mensaje" class="config-mensaje" style="display:none;"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab: Consecutivos -->
+          <div id="config-panel-consecutivos" class="config-panel" style="display:none;">
+            <div id="consecutivos-container" class="consecutivos-container">
+              <div class="consecutivos-header">
+                <span class="material-icons" style="vertical-align:middle; margin-right:8px; color:#ffcf22;">confirmation_number</span>
+                <h4 style="margin:0; font-size:15px; font-weight:700;">Resolución de Consecutivos — Órdenes de Pedido</h4>
+              </div>
+              <div class="consecutivos-body">
+                <div class="consec-rango-grid">
+                  <div class="consec-campo">
+                    <label class="config-label">Desde (inicio)</label>
+                    <input type="number" id="consec-inicio" class="config-input" min="1" step="1" placeholder="1">
+                  </div>
+                  <div class="consec-campo">
+                    <label class="config-label">Hasta (fin)</label>
+                    <input type="number" id="consec-fin" class="config-input" min="1" step="1" placeholder="500">
+                  </div>
+                  <div class="consec-campo">
+                    <label class="config-label">Último consecutivo usado</label>
+                    <div class="consec-actual-readonly" id="consec-actual-display">—</div>
+                  </div>
+                </div>
+                <div class="consec-progreso-wrap">
+                  <div class="consec-progreso-bar-bg">
+                    <div class="consec-progreso-bar" id="consec-barra" style="width:0%"></div>
+                  </div>
+                  <span class="consec-progreso-texto" id="consec-progreso-texto">Cargando...</span>
+                </div>
+                <div class="consecutivos-acciones">
+                  <button class="btn-principal" onclick="guardarRangoConsecutivo()" style="width:auto; padding:10px 22px;">
+                    <span class="material-icons" style="font-size:16px; vertical-align:middle;">save</span> Guardar rango
+                  </button>
+                  <button class="btn-reiniciar-consec" onclick="confirmarReinicioConsecutivo()">
+                    <span class="material-icons" style="font-size:16px; vertical-align:middle;">restart_alt</span> Reiniciar consecutivo
+                  </button>
+                </div>
+                <span id="consec-mensaje" class="config-mensaje" style="display:none; margin-top:8px;"></span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </main>
+
+      <!-- FAB: botón flotante para Nueva Orden (visible solo en móvil) -->
+      <button class="fab-nueva-orden" onclick="mostrarPaginaNuevaOrden()" aria-label="Nueva Orden">
+        <span class="material-icons">add</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL: Nuevo Cliente ==================== -->
+  <div id="modal-nuevo-cliente" class="modal-overlay" style="display:none;">
+    <div class="modal-contenido">
+      <div class="modal-header">
+        <h3>Nuevo Cliente</h3>
+        <button class="btn-cerrar-modal" onclick="cerrarModal('modal-nuevo-cliente')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="campo-form">
+          <label>Nombre del local</label>
+          <input type="text" id="cliente-nombre" placeholder="Nombre del local" required>
+        </div>
+        <div class="campo-form">
+          <label>Contacto</label>
+          <input type="text" id="cliente-contacto" placeholder="Persona de contacto">
+        </div>
+        <div class="campo-form">
+          <label>Teléfono</label>
+          <input type="tel" id="cliente-telefono" placeholder="Teléfono">
+        </div>
+        <div class="campo-form">
+          <label>Ciudad</label>
+          <input type="text" id="cliente-ciudad" placeholder="Ciudad" value="Cali">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secundario" onclick="cerrarModal('modal-nuevo-cliente')">Cancelar</button>
+        <button class="btn-principal" onclick="guardarNuevoCliente()">Guardar Cliente</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL: Nuevo Usuario ==================== -->
+  <div id="modal-nuevo-usuario" class="modal-overlay" style="display:none;">
+    <div class="modal-contenido">
+      <div class="modal-header">
+        <h3>Nuevo Usuario</h3>
+        <button class="btn-cerrar-modal" onclick="cerrarModal('modal-nuevo-usuario')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="campo-form">
+          <label>Nombre completo</label>
+          <input type="text" id="usuario-nombre-input" placeholder="Nombre completo" required>
+        </div>
+        <div class="campo-form">
+          <label>Email</label>
+          <input type="email" id="usuario-email" placeholder="correo@ejemplo.com" required>
+        </div>
+        <div class="campo-form">
+          <label>Contraseña</label>
+          <input type="password" id="usuario-password" placeholder="Contraseña" required>
+        </div>
+        <div class="campo-form">
+          <label>Rol</label>
+          <select id="usuario-rol">
+            <option value="Vendedor">Vendedor</option>
+            <option value="Auxiliar">Auxiliar</option>
+            <option value="Super admin">Super admin</option>
+          </select>
+        </div>
+        <div class="campo-form">
+          <label>Local asignado</label>
+          <input type="text" id="usuario-local" placeholder="Local asignado">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secundario" onclick="cerrarModal('modal-nuevo-usuario')">Cancelar</button>
+        <button class="btn-principal" onclick="guardarNuevoUsuario()">Guardar Usuario</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL: Editar Cliente ==================== -->
+  <div id="modal-editar-cliente" class="modal-overlay" style="display:none;">
+    <div class="modal-contenido">
+      <div class="modal-header">
+        <h3>Editar Cliente</h3>
+        <button class="btn-cerrar-modal" onclick="cerrarModal('modal-editar-cliente')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="campo-form">
+          <label>ID</label>
+          <input type="text" id="edit-cliente-id" disabled class="input-readonly">
+        </div>
+        <div class="campo-form">
+          <label>Nombre del local *</label>
+          <input type="text" id="edit-cliente-nombre" placeholder="Nombre del local" required>
+        </div>
+        <div class="campo-form">
+          <label>Contacto</label>
+          <input type="text" id="edit-cliente-contacto" placeholder="Persona de contacto">
+        </div>
+        <div class="campo-form">
+          <label>Teléfono *</label>
+          <input type="tel" id="edit-cliente-telefono" placeholder="Teléfono" required>
+        </div>
+        <div class="campo-form">
+          <label>Ciudad</label>
+          <input type="text" id="edit-cliente-ciudad" placeholder="Ciudad">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secundario" onclick="cerrarModal('modal-editar-cliente')">Cancelar</button>
+        <button class="btn-principal" onclick="guardarEdicionCliente()">Guardar cambios</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL: Editar Usuario ==================== -->
+  <div id="modal-editar-usuario" class="modal-overlay" style="display:none;">
+    <div class="modal-contenido">
+      <div class="modal-header">
+        <h3>Editar Usuario</h3>
+        <button class="btn-cerrar-modal" onclick="cerrarModal('modal-editar-usuario')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="campo-form">
+          <label>ID</label>
+          <input type="text" id="edit-usuario-id" disabled class="input-readonly">
+        </div>
+        <div class="campo-form">
+          <label>Nombre completo *</label>
+          <input type="text" id="edit-usuario-nombre" placeholder="Nombre completo" required>
+        </div>
+        <div class="campo-form">
+          <label>Email *</label>
+          <input type="email" id="edit-usuario-email" placeholder="correo@ejemplo.com" required>
+        </div>
+        <div class="campo-form">
+          <label>Rol *</label>
+          <select id="edit-usuario-rol">
+            <option value="Vendedor">Vendedor</option>
+            <option value="Auxiliar">Auxiliar</option>
+            <option value="Super admin">Super admin</option>
+          </select>
+        </div>
+        <div class="campo-form">
+          <label>Local asignado</label>
+          <input type="text" id="edit-usuario-local" placeholder="Local asignado">
+        </div>
+        <div class="campo-form">
+          <label>Nueva contraseña (dejar vacío para no cambiar)</label>
+          <input type="password" id="edit-usuario-password" placeholder="••••••••">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secundario" onclick="cerrarModal('modal-editar-usuario')">Cancelar</button>
+        <button class="btn-principal" onclick="guardarEdicionUsuario()">Guardar cambios</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL: Nuevo/Editar Producto ==================== -->
+  <div id="modal-producto" class="modal-overlay" style="display:none;">
+    <div class="modal-contenido">
+      <div class="modal-header">
+        <h3 id="modal-producto-titulo">Nuevo Producto</h3>
+        <button class="btn-cerrar-modal" onclick="cerrarModal('modal-producto')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="producto-id">
+        <div class="campo-form">
+          <label>Nombre *</label>
+          <input type="text" id="producto-nombre" placeholder="Nombre del producto" required>
+        </div>
+        <div class="campo-form">
+          <label>Categoría</label>
+          <input type="text" id="producto-categoria" placeholder="Ej: Torre, Tiny PC, Mini PC, Portátil, Accesorio" list="lista-categorias">
+          <datalist id="lista-categorias">
+            <option value="Torre">
+            <option value="Tiny PC">
+            <option value="Mini PC">
+            <option value="Portátil">
+            <option value="Accesorio">
+          </datalist>
+        </div>
+        <div class="campo-form">
+          <label>Descripción</label>
+          <textarea id="producto-descripcion" rows="3" placeholder="Descripción del producto..."></textarea>
+        </div>
+        <div class="campo-form">
+          <label>Precio de referencia</label>
+          <input type="number" id="producto-precio" placeholder="0" min="0">
+        </div>
+        <div class="campo-form">
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+            <input type="checkbox" id="producto-activo" checked style="width:auto; min-height:auto;">
+            Producto activo
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secundario" onclick="cerrarModal('modal-producto')">Cancelar</button>
+        <button class="btn-principal" id="btn-guardar-producto" onclick="guardarProducto()">Guardar Producto</button>
+      </div>
+    </div>
+  </div>
+
+  <?!= include('Javascript'); ?>
+</body>
+</html>
